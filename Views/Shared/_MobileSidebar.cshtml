@@ -1,0 +1,70 @@
+﻿@{
+    var initial = User.Identity?.Name?.FirstOrDefault().ToString().ToUpper() ?? "U";
+    var currentPath = Context.Request.Path.Value ?? "/";
+}
+
+<div id="mobileOverlay" class="fixed inset-0 z-40 hidden bg-slate-900/50 backdrop-blur-sm transition-opacity"></div>
+
+<aside id="mobileSidebar" class="fixed inset-y-0 left-0 z-50 flex w-72 -translate-x-full flex-col bg-white shadow-2xl transition-transform duration-300 ease-in-out md:hidden">
+
+    <div class="flex h-16 shrink-0 items-center justify-between border-b border-slate-100 px-6">
+        <div class="flex items-center gap-2">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold shadow-sm">
+                <i data-lucide="activity" class="h-5 w-5"></i>
+            </div>
+            <span class="text-xl font-bold tracking-tight text-slate-900">PulseBoard</span>
+        </div>
+        <button id="closeMobileMenuBtn" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+            <i data-lucide="x" class="h-5 w-5"></i>
+        </button>
+    </div>
+
+    <div class="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-1">
+        <a href="/Dashboard" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all @(currentPath == "/Dashboard" ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50")">
+            <i data-lucide="layout-grid" class="h-5 w-5 @(currentPath == "/Dashboard" ? "text-indigo-600" : "text-slate-400")"></i>
+            Dashboard
+        </a>
+        <a href="/Boards" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all @(currentPath.StartsWith("/Boards") ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50")">
+            <i data-lucide="kanban-square" class="h-5 w-5 @(currentPath.StartsWith("/Boards") ? "text-indigo-600" : "text-slate-400")"></i>
+            Meus Quadros
+        </a>
+    </div>
+
+    <div class="border-t border-slate-100 p-4 bg-white shrink-0">
+        <div class="flex items-center gap-3 rounded-xl bg-slate-50 p-3 mb-2 border border-slate-100">
+            <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-sm uppercase shadow-sm">
+                @initial
+            </div>
+            <div class="flex flex-col flex-1 min-w-0">
+                <span class="text-sm font-bold text-slate-900 truncate">@User.Identity?.Name</span>
+            </div>
+        </div>
+
+        <a href="/Auth/Logout" class="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-3 text-sm font-bold text-slate-500 transition-colors hover:bg-red-50 hover:text-red-600 border border-transparent hover:border-red-100">
+            <i data-lucide="log-out" class="h-5 w-5"></i> Sair
+        </a>
+    </div>
+</aside>
+
+<script>
+    // Lógica de deslizar o menu mobile (Substitui o estado do React)
+    const mobileSidebar = document.getElementById('mobileSidebar');
+    const mobileOverlay = document.getElementById('mobileOverlay');
+    const openBtn = document.getElementById('openMobileMenuBtn'); // Este ID está no Topbar
+    const closeBtn = document.getElementById('closeMobileMenuBtn');
+
+    function toggleMobileMenu() {
+        mobileSidebar.classList.toggle('-translate-x-full');
+        mobileOverlay.classList.toggle('hidden');
+    }
+
+    // Como o openBtn é renderizado DEPOIS no DOM pelo _Topbar, associamos o evento ao body
+    document.body.addEventListener('click', function(e) {
+        if (e.target.closest('#openMobileMenuBtn')) {
+            toggleMobileMenu();
+        }
+    });
+
+    closeBtn.addEventListener('click', toggleMobileMenu);
+    mobileOverlay.addEventListener('click', toggleMobileMenu);
+</script>
