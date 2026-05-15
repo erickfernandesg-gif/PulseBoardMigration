@@ -1,5 +1,87 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
-@{
-}
+﻿<div id="createTaskModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-sm transition-opacity">
+    <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="w-full max-w-lg transform overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all">
+
+            <div class="flex items-center justify-between mb-6">
+                <h3 class="text-lg font-bold text-slate-900">Nova Tarefa</h3>
+                <button type="button" onclick="closeCreateTaskModal()" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+                    <i data-lucide="x" class="h-5 w-5"></i>
+                </button>
+            </div>
+
+            <form id="createTaskForm" asp-controller="Boards" asp-action="CreateTask" method="post">
+                <input type="hidden" id="TaskBoardId" name="boardId" value="@Model.Board.Id" />
+
+                <div class="space-y-4">
+                    <div>
+                        <label for="Title" class="block text-sm font-semibold text-slate-700 mb-1">Título da Tarefa <span class="text-red-500">*</span></label>
+                        <input type="text" id="Title" name="title" required class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" placeholder="O que precisa ser feito?" />
+                    </div>
+
+                    <div>
+                        <label for="Description" class="block text-sm font-semibold text-slate-700 mb-1">Descrição</label>
+                        <textarea id="Description" name="description" rows="3" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" placeholder="Adicione mais detalhes..."></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="CreateColumnId" class="block text-sm font-semibold text-slate-700 mb-1">Status / Coluna</label>
+                            <select id="CreateColumnId" name="columnId" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
+                                @if (Model.Columns != null)
+                                {
+                                    foreach (var col in Model.Columns)
+                                    {
+                                        <option value="@col.Id">@col.Title</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                        <div>
+                            <label for="CreateAssigneeId" class="block text-sm font-semibold text-slate-700 mb-1">Responsável</label>
+                            <select id="CreateAssigneeId" name="assigneeId" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
+                                <option value="">Não atribuído</option>
+                                @if (ViewData["Users"] != null)
+                                {
+                                    foreach (var user in (IEnumerable<User>)ViewData["Users"])
+                                    {
+                                        <option value="@user.Id">@user.Name</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="Priority" class="block text-sm font-semibold text-slate-700 mb-1">Prioridade</label>
+                            <select id="Priority" name="priority" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
+                                <option value="Baixa">Baixa</option>
+                                <option value="Média" selected>Média</option>
+                                <option value="Alta">Alta</option>
+                                <option value="Urgente">Urgente</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label for="StartDate" class="block text-sm font-semibold text-slate-700 mb-1">Início</label>
+                                <input type="date" id="StartDate" name="startDate" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-600 transition-all" />
+                            </div>
+                            <div>
+                                <label for="DueDate" class="block text-sm font-semibold text-slate-700 mb-1">Entrega</label>
+                                <input type="date" id="DueDate" name="dueDate" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-600 transition-all" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex justify-end gap-3 border-t border-slate-100 pt-5">
+                    <button type="button" onclick="closeCreateTaskModal()" class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Cancelar</button>
+                    <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200 flex items-center gap-2">
+                        <i data-lucide="plus" class="h-4 w-4"></i>
+                        Criar Tarefa
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

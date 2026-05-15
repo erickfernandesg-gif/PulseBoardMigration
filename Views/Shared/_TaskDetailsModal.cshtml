@@ -1,0 +1,121 @@
+﻿<div id="taskDetailsModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-sm transition-opacity">
+    <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white shadow-2xl transition-all flex flex-col max-h-[90vh]">
+
+            <form id="editTaskForm" asp-controller="Boards" asp-action="UpdateTaskDetails" method="post" class="flex flex-col h-full overflow-hidden">
+                <input type="hidden" name="boardId" value="@Model.Board.Id" />
+                <input type="hidden" id="EditTaskId" name="taskId" />
+
+                <div class="flex items-center justify-between border-b border-slate-100 p-6 shrink-0">
+                    <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <i data-lucide="edit-2" class="h-5 w-5 text-indigo-500"></i>
+                        Detalhes da Tarefa
+                    </h3>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="confirmDeleteTask()" class="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Excluir Tarefa">
+                            <i data-lucide="trash-2" class="h-5 w-5"></i>
+                        </button>
+                        <button type="button" onclick="closeTaskDetailsModal()" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                            <i data-lucide="x" class="h-5 w-5"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-6 space-y-5 overflow-y-auto flex-1">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Título</label>
+                        <input type="text" id="EditTitle" name="title" required class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Descrição</label>
+                        <textarea id="EditDescription" name="description" rows="4" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Status / Coluna</label>
+                            <select id="EditColumnId" name="columnId" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all">
+                                @if (Model.Columns != null)
+                                {
+                                    foreach (var col in Model.Columns)
+                                    {
+                                        <option value="@col.Id">@col.Title</option>
+                                    }
+                                }
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Responsável</label>
+                            <div class="relative">
+                                <i data-lucide="user-plus" class="absolute left-3 top-2.5 h-4 w-4 text-slate-400"></i>
+                                <select id="EditAssigneeId" name="assigneeId" class="w-full rounded-xl border border-slate-200 pl-9 pr-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all">
+                                    <option value="">Não atribuído</option>
+                                    @* Assumindo que você passará a lista de usuários no Model (ex: Model.TeamMembers ou ViewData["Users"]) *@
+                                    @if (ViewData["Users"] != null)
+                                    {
+                                        foreach (var user in (IEnumerable<User>)ViewData["Users"])
+                                        {
+                                            <option value="@user.Id">@user.Name</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Prioridade</label>
+                            <select id="EditPriority" name="priority" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all">
+                                <option value="Baixa">Baixa</option>
+                                <option value="Média">Média</option>
+                                <option value="Alta">Alta</option>
+                                <option value="Urgente">Urgente</option>
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Início</label>
+                                <input type="date" id="EditStartDate" name="startDate" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Entrega</label>
+                                <input type="date" id="EditDueDate" name="dueDate" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 border-t border-slate-100 pt-6">
+                        <div class="flex items-center gap-2 mb-4 text-slate-700">
+                            <i data-lucide="message-square" class="h-5 w-5"></i>
+                            <h4 class="font-bold">Comentários</h4>
+                        </div>
+
+                        <div id="taskCommentsList" class="space-y-3 mb-4 max-h-32 overflow-y-auto">
+                            <p class="text-sm text-slate-500 italic text-center py-2" id="noCommentsMsg">Nenhum comentário ainda.</p>
+                        </div>
+
+                        <div class="flex gap-2 mt-2">
+                            <input type="text" id="newCommentInput" placeholder="Adicionar um comentário..." class="flex-1 rounded-xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
+                            <button type="button" onclick="submitTaskComment()" class="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200 transition-all">Enviar</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 px-6 py-4 flex justify-end gap-3 shrink-0 rounded-b-2xl">
+                    <button type="button" onclick="closeTaskDetailsModal()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">Cancelar</button>
+                    <button type="submit" class="rounded-xl bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all flex items-center gap-2">
+                        <i data-lucide="save" class="h-4 w-4"></i>
+                        Salvar Alterações
+                    </button>
+                </div>
+            </form>
+
+            <form id="deleteTaskForm" asp-controller="Boards" asp-action="DeleteTask" method="post" class="hidden">
+                <input type="hidden" name="boardId" value="@Model.Board.Id" />
+                <input type="hidden" id="DeleteTaskId" name="taskId" />
+            </form>
+        </div>
+    </div>
+</div>

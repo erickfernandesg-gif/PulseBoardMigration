@@ -1,29 +1,47 @@
 ﻿using System;
 using System.ComponentModel.DataAnnotations;
+using Postgrest.Attributes;
+using Postgrest.Models;
 
 namespace PulseBoardMigration.Models
 {
-    public class PulseTask
+    [Table("tasks")]
+    public class PulseTask : BaseModel
     {
+        [PrimaryKey("id", false)]
         public Guid Id { get; set; }
 
-        // Chaves Estrangeiras para saber onde esta tarefa está
+        [Column("board_id")]
         public Guid BoardId { get; set; }
-        public Guid ColumnId { get; set; }
 
-        [Required(ErrorMessage = "O título da tarefa é obrigatório.")]
+        [Column("title")]
+        [Required(ErrorMessage = "O título é obrigatório")]
         public string Title { get; set; }
 
+        [Column("description")]
         public string Description { get; set; }
 
-        public string Priority { get; set; } // Ex: Baixa, Média, Alta
+        // É AQUI que o C# liga a tarefa à coluna do JSON (ex: "todo", "done")
+        [Column("status")]
+        public string Status { get; set; }
 
-        public string Status { get; set; } // Ex: A Fazer, Em Progresso, Concluído
+        [Column("priority")]
+        public string Priority { get; set; }
 
+        // A posição é vital para fazermos o Drag and Drop funcionar depois!
+        //[Column("position")]
+        //public int Position { get; set; }
+
+        [Column("due_date")]
         public DateTime? DueDate { get; set; }
 
+        [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
-        public DateTime UpdatedAt { get; set; }
+        // Dica de Sênior: Deixei comentado para evitar o mesmo erro do 'boards'. 
+        // Se a sua tabela 'tasks' lá no Supabase também NÃO tiver o 'updated_at', mantenha comentado.
+        // Se tiver, pode remover as "//".
+        // [Column("updated_at")]
+        // public DateTime UpdatedAt { get; set; }
     }
 }
