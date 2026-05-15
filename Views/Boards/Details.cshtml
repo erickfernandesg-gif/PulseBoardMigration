@@ -1,5 +1,214 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
+﻿@model PulseBoardMigration.Models.BoardDetailsViewModel
+
 @{
+    ViewData["Title"] = Model.Board.Name;
 }
+
+<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div class="flex items-center gap-4">
+        <a href="/Boards" class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 transition-colors">
+            <i data-lucide="arrow-left" class="h-5 w-5"></i>
+        </a>
+        <div>
+            <h1 class="text-2xl font-bold tracking-tight text-slate-900">@Model.Board.Name</h1>
+            <p class="text-sm text-slate-500">@Model.Board.Description</p>
+        </div>
+    </div>
+
+    <div class="flex items-center gap-2">
+        <button class="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+            <i data-lucide="filter" class="h-4 w-4"></i> Filtros
+        </button>
+        <button onclick="openCreateTaskModal()" class="flex h-10 items-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white hover:bg-indigo-700 transition-colors shadow-sm">
+            <i data-lucide="plus" class="h-4 w-4"></i> Nova Tarefa
+        </button>
+    </div>
+</div>
+
+<div class="flex h-[calc(100vh-200px)] gap-6 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-200">
+
+    @foreach (var column in Model.Board.Settings)
+    {
+        <div class="flex w-80 shrink-0 flex-col rounded-xl bg-slate-100/50 border border-slate-200/60 p-4">
+
+            <div class="mb-4 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">@column.Title</h3>
+                    <span class="flex h-5 w-5 items-center justify-center rounded-full bg-slate-200 text-[10px] font-bold text-slate-600">
+                        @Model.Tasks.Count(t => t.Status == column.Id)
+                    </span>
+                </div>
+                <button class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="more-horizontal" class="h-4 w-4"></i>
+                </button>
+            </div>
+
+            <div id="col-@column.Id" data-status="@column.Id" class="kanban-column-dropzone flex flex-1 flex-col gap-3 min-h-[50px]">
+
+                @foreach (var task in Model.Tasks.Where(t => t.Status == column.Id).OrderBy(t => t.CreatedAt))
+                {
+                    <div class="group relative flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition-all hover:border-indigo-300 hover:shadow-md cursor-grab active:cursor-grabbing"
+                         data-id="@task.Id"
+                         data-title="@task.Title"
+                         data-description="@task.Description"
+                         data-priority="@task.Priority"
+                         data-due="@(task.DueDate?.ToString("yyyy-MM-dd"))"
+                         onclick="openTaskDetailsModal(this)">
+
+                        <div class="mb-2 flex items-start justify-between">
+                            <span class="rounded-md bg-indigo-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-600">
+                                @task.Priority
+                            </span>
+                            <button class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-600 transition-opacity">
+                                <i data-lucide="edit-3" class="h-3 w-3"></i>
+                            </button>
+                        </div>
+
+                        <h4 class="text-sm font-bold text-slate-900 mb-1">@task.Title</h4>
+                        <p class="text-xs text-slate-500 line-clamp-2 mb-3">@task.Description</p>
+
+                        <div class="flex items-center justify-between mt-auto">
+                            <div class="flex -space-x-2">
+                                <div class="h-6 w-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[10px] font-bold">
+                                    EF
+                                </div>
+                            </div>
+                            @if (task.DueDate.HasValue)
+                            {
+                                <div class="flex items-center gap-1 text-[10px] font-medium text-slate-400">
+                                    <i data-lucide="calendar" class="h-3 w-3"></i>
+                                    @task.DueDate.Value.ToString("dd/MM")
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+            </div>
+
+            <button onclick="openCreateTaskModal('@column.Id')" class="mt-4 flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium text-slate-400 hover:bg-white hover:text-slate-600 border border-transparent hover:border-slate-200 transition-all">
+                <i data-lucide="plus" class="h-3 w-3"></i> Adicionar Tarefa
+            </button>
+        </div>
+    }
+
+</div>
+
+@await Html.PartialAsync("_CreateTaskModal", Model)
+@await Html.PartialAsync("_TaskDetailsModal", Model)
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const columns = document.querySelectorAll('.kanban-column-dropzone');
+
+        columns.forEach(column => {
+            new Sortable(column, {
+                group: 'kanban', // Permite mover entre colunas
+                animation: 150,
+                ghostClass: 'bg-indigo-50',
+                chosenClass: 'border-indigo-500',
+                dragClass: 'opacity-50',
+
+                // Evento disparado ao soltar o card
+                onEnd: function(evt) {
+                    const taskId = evt.item.getAttribute('data-id');
+                    const newStatus = evt.to.getAttribute('data-status');
+                    const oldStatus = evt.from.getAttribute('data-status');
+
+                    // Se soltou na mesma coluna de onde saiu, não faz nada para poupar o servidor
+                    if (newStatus === oldStatus) return;
+
+                    // Mostra um feedback visual de carregamento (opcional, deixa o card meio transparente)
+                    evt.item.style.opacity = '0.5';
+
+                    // Faz a chamada silenciosa para o nosso C# Controller
+                    fetch('/Boards/UpdateTaskStatus', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            taskId: taskId,
+                            newStatus: newStatus
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        evt.item.style.opacity = '1'; // Restaura a cor do card
+
+                        if(!data.success) {
+                            console.error("Erro Real do Banco:", data.message);
+                            alert("O Supabase recusou: " + data.message);
+                            window.location.reload();
+                        } else {
+                            console.log("Salvo no banco com sucesso!");
+                        }
+                    })
+                    .catch(err => {
+                        evt.item.style.opacity = '1';
+                        console.error("Erro de rede:", err);
+                        alert("Erro de conexão. Verifique sua internet.");
+                    });
+                }
+            });
+        });
+    });
+
+    // --- LÓGICA DO MODAL DE CRIAÇÃO ---
+    const taskModal = document.getElementById('createTaskModal');
+    const taskStatusInput = document.getElementById('TaskStatus');
+
+    function openCreateTaskModal(status = 'todo') {
+        taskStatusInput.value = status;
+        taskModal.classList.remove('hidden');
+    }
+
+    function closeCreateTaskModal() {
+        taskModal.classList.add('hidden');
+        document.getElementById('Title').value = '';
+        document.getElementById('Description').value = '';
+    }
+
+    taskModal.addEventListener('click', (e) => {
+        if (e.target === taskModal) closeCreateTaskModal();
+    });
+
+    // --- LÓGICA DO MODAL DE DETALHES / EDIÇÃO ---
+    const detailsModal = document.getElementById('taskDetailsModal');
+
+    function openTaskDetailsModal(cardElement) {
+        // Preenche o formulário invisívelmente pegando os dados do próprio HTML do card
+        document.getElementById('EditTaskId').value = cardElement.getAttribute('data-id');
+        document.getElementById('EditTitle').value = cardElement.getAttribute('data-title');
+        document.getElementById('EditDescription').value = cardElement.getAttribute('data-description');
+
+        const priority = cardElement.getAttribute('data-priority');
+        if (priority) document.getElementById('EditPriority').value = priority;
+
+        const dueDate = cardElement.getAttribute('data-due');
+        if (dueDate) document.getElementById('EditDueDate').value = dueDate;
+        else document.getElementById('EditDueDate').value = '';
+
+        detailsModal.classList.remove('hidden');
+    }
+
+    function closeTaskDetailsModal() {
+        detailsModal.classList.add('hidden');
+    }
+
+    function confirmDeleteTask() {
+        if (confirm("Tem certeza que deseja excluir esta tarefa? Esta ação não pode ser desfeita.")) {
+            // Copia o ID da tarefa para o formulário de exclusão
+            document.getElementById('DeleteTaskId').value = document.getElementById('EditTaskId').value;
+            // Submete o formulário invisível que chama a Action DeleteTask
+            document.getElementById('deleteTaskForm').submit();
+        }
+    }
+
+    // Fechar ao clicar fora da área branca do modal
+    detailsModal.addEventListener('click', (e) => {
+        if (e.target === detailsModal) closeTaskDetailsModal();
+    });
+</script>

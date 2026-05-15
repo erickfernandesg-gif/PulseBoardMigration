@@ -1,7 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.Threading.Tasks;
+﻿using Microsoft.AspNetCore.Authorization; // 1. Adicione este using
+using Microsoft.AspNetCore.Mvc;
 using PulseBoardMigration.Services;
-using Microsoft.AspNetCore.Authorization; // 1. Adicione este using
+using System.Threading.Tasks;
+using PulseBoardMigration.Models;
 
 namespace PulseBoardMigration.Controllers
 {
@@ -32,5 +33,76 @@ namespace PulseBoardMigration.Controllers
 
             return RedirectToAction("Index");
         }
+        [HttpGet]
+        public async Task<IActionResult> Details(Guid id)
+        {
+            // 1. Pega os dados do banco
+            var board = await _boardService.GetBoardByIdAsync(id);
+            if (board == null)
+            {
+                return NotFound(); // Se tentarem acessar um quadro deletado, dá erro 404
+            }
+
+            var tasks = await _boardService.GetTasksByBoardIdAsync(id);
+
+            // 2. Monta o pacote de dados
+            var viewModel = new BoardDetailsViewModel
+            {
+                Board = board,
+                Tasks = tasks
+            };
+
+            // 3. Entrega o pacote para a View desenhar o Kanban
+            return View(viewModel);
+        }
+        [HttpPost]
+        public async Task<IActionResult> UpdateTaskStatus([FromBody] UpdateTaskStatusRequest request)
+        {
+            if (request == null || request.TaskId == Guid.Empty || string.IsNullOrEmpty(request.NewStatus))
+            {
+                return BadRequest(new { success = false, message = "Dados não chegaram no C#." });
+            }
+
+            // Chama o serviço e recebe o erro (se houver)
+            var errorMessage = await _boardService.UpdateTaskStatusAsync(request.TaskId, request.NewStatus);
+
+            if (errorMessage == null)
+            {
+                return Json(new { success = true });
+            }
+
+            // Retorna o ERRO REAL do banco de dados!
+            return StatusCode(500, new { success = false, message = errorMessage });
+        }
+        [HttpPost]
+        public async Task<IActionResult> CreateTask(Guid boardId, string title, string description, string status, string priority, DateTime? dueDate)
+        {
+            if (boardId != Guid.Empty && !string.IsNullOrEmpty(title))
+            {
+                await _boardService.CreateTaskAsync(boardId, title, description, status, priority, dueDate);
+            }
+
+            // Recarrega a página do Kanban atual para exibir o novo card
+            return RedirectToAction("Details", new { id = boardId });
+        }
+        [HttpPost]
+        public async Task<IActionResult> UpdateTaskDetails(Guid boardId, Guid taskId, string title, string description, string priority, DateTime? dueDate)
+        {
+            await _boardService.UpdateTaskDetailsAsync(taskId, title, description, priority, dueDate);
+            return RedirectToAction("Details", new { id = boardId });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> DeleteTask(Guid boardId, Guid taskId)
+        {
+            await _boardService.DeleteTaskAsync(taskId);
+            return RedirectToAction("Details", new { id = boardId });
+        }
+    }
+    // Adicione isto no final do arquivo, antes da última chave "}"
+    public class UpdateTaskStatusRequest
+    {
+        public Guid TaskId { get; set; }
+        public string NewStatus { get; set; }
     }
 }

@@ -1,0 +1,61 @@
+﻿<div id="taskDetailsModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-sm transition-opacity">
+    <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="w-full max-w-xl transform overflow-hidden rounded-2xl bg-white shadow-2xl transition-all">
+
+            <form id="editTaskForm" asp-controller="Boards" asp-action="UpdateTaskDetails" method="post">
+                <input type="hidden" name="boardId" value="@Model.Board.Id" />
+                <input type="hidden" id="EditTaskId" name="taskId" />
+
+                <div class="flex items-center justify-between border-b border-slate-100 p-6">
+                    <h3 class="text-lg font-bold text-slate-900">Detalhes da Tarefa</h3>
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="confirmDeleteTask()" class="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Excluir Tarefa">
+                            <i data-lucide="trash-2" class="h-5 w-5"></i>
+                        </button>
+                        <button type="button" onclick="closeTaskDetailsModal()" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                            <i data-lucide="x" class="h-5 w-5"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-6 space-y-5">
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Título</label>
+                        <input type="text" id="EditTitle" name="title" required class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Descrição</label>
+                        <textarea id="EditDescription" name="description" rows="4" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"></textarea>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6">
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Prioridade</label>
+                            <select id="EditPriority" name="priority" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all">
+                                <option value="Baixa">Baixa</option>
+                                <option value="Média">Média</option>
+                                <option value="Alta">Alta</option>
+                                <option value="Urgente">Urgente</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Data de Entrega</label>
+                            <input type="date" id="EditDueDate" name="dueDate" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 px-6 py-4 flex justify-end gap-3">
+                    <button type="button" onclick="closeTaskDetailsModal()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700">Cancelar</button>
+                    <button type="submit" class="rounded-xl bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all">Salvar Alterações</button>
+                </div>
+            </form>
+
+            <form id="deleteTaskForm" asp-controller="Boards" asp-action="DeleteTask" method="post" class="hidden">
+                <input type="hidden" name="boardId" value="@Model.Board.Id" />
+                <input type="hidden" id="DeleteTaskId" name="taskId" />
+            </form>
+        </div>
+    </div>
+</div>
