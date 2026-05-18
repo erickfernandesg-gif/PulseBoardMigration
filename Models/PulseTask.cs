@@ -5,7 +5,7 @@ using Postgrest.Models;
 
 namespace PulseBoardMigration.Models
 {
-    [Table("tasks")]
+    [Table("tasks")] // Certifique-se de que o nome da tabela no Supabase é realmente 'tasks' (no original era 'pulse_tasks')
     public class PulseTask : BaseModel
     {
         [PrimaryKey("id", false)]
@@ -31,6 +31,36 @@ namespace PulseBoardMigration.Models
         // A posição é vital para fazermos o Drag and Drop funcionar depois!
         //[Column("position")]
         //public int Position { get; set; }
+
+        // ==========================================
+        // CAMPOS PARA GANTT E RESPONSÁVEL
+        // ==========================================
+
+        [Column("start_date")]
+        public DateTime? StartDate { get; set; }
+
+        [Column("assignee_id")]
+        public Guid? AssigneeId { get; set; }
+
+        // ==========================================
+        // NOVOS CAMPOS AVANÇADOS (IGUAIS AO NEXT.JS)
+        // ==========================================
+
+        [Column("department")]
+        public string Department { get; set; }
+
+        [Column("risk_level")]
+        public string RiskLevel { get; set; }
+
+        [Column("story_points")]
+        public int? StoryPoints { get; set; }
+
+        // Como recebemos do input HTML uma string separada por vírgulas (ex: "bug, frontend"), 
+        // vamos armazenar como string simples para facilitar a migração.
+        [Column("tags")]
+        public string Tags { get; set; }
+
+        // ==========================================
 
         [Column("due_date")]
         public DateTime? DueDate { get; set; }

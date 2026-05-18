@@ -1,12 +1,15 @@
-﻿using Microsoft.AspNetCore.Authorization; // 1. Adicione este using
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PulseBoardMigration.Services;
+using System;
 using System.Threading.Tasks;
+using System.Linq;
+using System.Collections.Generic;
 using PulseBoardMigration.Models;
 
 namespace PulseBoardMigration.Controllers
 {
-    [Authorize] // 2. Adicione esta tag! Ela tranca todas as rotas deste Controller.
+    [Authorize]
     public class BoardsController : Controller
     {
         private readonly BoardService _boardService;
@@ -21,8 +24,9 @@ namespace PulseBoardMigration.Controllers
             var boards = await _boardService.GetBoardsAsync();
             return View(boards);
         }
+
         [HttpPost]
-        public async Task<IActionResult> Create(string name, string description) // Mudou de title para name
+        public async Task<IActionResult> Create(string name, string description)
         {
             var userIdString = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
@@ -33,6 +37,7 @@ namespace PulseBoardMigration.Controllers
 
             return RedirectToAction("Index");
         }
+
         [HttpGet]
         public async Task<IActionResult> Details(Guid id)
         {
@@ -40,83 +45,103 @@ namespace PulseBoardMigration.Controllers
             var board = await _boardService.GetBoardByIdAsync(id);
             if (board == null)
             {
-                return NotFound(); // Se tentarem acessar um quadro deletado, dá erro 404
+                return NotFound();
             }
 
             var tasks = await _boardService.GetTasksByBoardIdAsync(id);
 
-            // 2. Monta o pacote de dados
+            // 2. Prepara as colunas para o Modal não quebrar (mapeando de board.Settings)
+            var columns = board.Settings != null
+                ? board.Settings.Select(s => new Column { Id = s.Id, Title = s.Title }).ToList()
+                : new List<Column>();
+
+            // 3. Monta o pacote de dados
             var viewModel = new BoardDetailsViewModel
             {
                 Board = board,
-                Tasks = tasks
+                Tasks = tasks,
+                Columns = columns
             };
 
-            // 3. Entrega o pacote para a View desenhar o Kanban
+            // Simula uma lista de usuários da equipe (substitua futuramente por uma chamada ao AuthService para trazer do Supabase)
+            ViewData["Users"] = new List<User>();
+
+            // 4. Entrega o pacote para a View desenhar o Kanban
             return View(viewModel);
         }
+
+        // ==========================================
+        // ENDPOINTS AJAX (Não recarregam a página)
+        // ==========================================
+
         [HttpPost]
-        public async Task<IActionResult> UpdateTaskStatus([FromBody] UpdateTaskStatusRequest request)
+        public async Task<IActionResult> CreateTask(Guid boardId, string title, string description, string columnId, string priority, DateTime? startDate, DateTime? dueDate, Guid? assigneeId, string department, string riskLevel, int? storyPoints, string tags)
         {
-            if (request == null || request.TaskId == Guid.Empty || string.IsNullOrEmpty(request.NewStatus))
+            try
             {
-                return BadRequest(new { success = false, message = "Dados não chegaram no C#." });
+                if (boardId == Guid.Empty || string.IsNullOrEmpty(title))
+                {
+                    return Json(new { success = false, message = "Dados inválidos." });
+                }
+
+                // Passa os novos parâmetros para o serviço
+                var newTask = await _boardService.CreateTaskAsync(boardId, title, description, columnId, priority, startDate, dueDate, assigneeId, department, riskLevel, storyPoints, tags);
+
+                if (newTask != null)
+                    return Json(new { success = true, data = newTask });
+
+                return Json(new { success = false, message = "Falha ao criar tarefa no banco." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = ex.Message });
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> UpdateTaskDetails(Guid taskId, string title, string description, string columnId, string priority, DateTime? startDate, DateTime? dueDate, Guid? assigneeId, string department, string riskLevel, int? storyPoints, string tags)
+        {
+            try
+            {
+                var updatedTask = await _boardService.UpdateTaskDetailsAsync(taskId, title, description, columnId, priority, startDate, dueDate, assigneeId, department, riskLevel, storyPoints, tags);
+
+                if (updatedTask != null)
+                    return Json(new { success = true, data = updatedTask });
+
+                return Json(new { success = false, message = "Falha ao atualizar tarefa." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { success = false, message = ex.Message });
+            }
+        }
+
+        // Usado pelo Drag and Drop para mover cards de uma coluna para a outra silenciosamente
+        [HttpPost]
+        public async Task<IActionResult> MoveTask(Guid taskId, string newColumnId)
+        {
+            if (taskId == Guid.Empty || string.IsNullOrEmpty(newColumnId))
+            {
+                return Json(new { success = false, message = "ID da tarefa ou coluna inválido." });
             }
 
-            // Chama o serviço e recebe o erro (se houver)
-            var errorMessage = await _boardService.UpdateTaskStatusAsync(request.TaskId, request.NewStatus);
+            var success = await _boardService.UpdateTaskStatusAsync(taskId, newColumnId);
 
-            if (errorMessage == null)
+            return Json(new { success = success });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> DeleteTask(Guid taskId)
+        {
+            try
             {
-                return Json(new { success = true });
+                var success = await _boardService.DeleteTaskAsync(taskId);
+                return Json(new { success = success });
             }
-
-            // Retorna o ERRO REAL do banco de dados!
-            return StatusCode(500, new { success = false, message = errorMessage });
-        }
-        [HttpPost]
-        public async Task<IActionResult> CreateTask(Guid boardId, string title, string description, string status, string priority, DateTime? dueDate)
-        {
-            if (boardId != Guid.Empty && !string.IsNullOrEmpty(title))
+            catch (Exception ex)
             {
-                await _boardService.CreateTaskAsync(boardId, title, description, status, priority, dueDate);
+                return Json(new { success = false, message = ex.Message });
             }
-
-            // Recarrega a página do Kanban atual para exibir o novo card
-            return RedirectToAction("Details", new { id = boardId });
         }
-        [HttpPost]
-        public async Task<IActionResult> UpdateTaskDetails(Guid boardId, Guid taskId, string title, string description, string priority, DateTime? dueDate)
-        {
-            await _boardService.UpdateTaskDetailsAsync(taskId, title, description, priority, dueDate);
-            return RedirectToAction("Details", new { id = boardId });
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> DeleteTask(Guid boardId, Guid taskId)
-        {
-            await _boardService.DeleteTaskAsync(taskId);
-            return RedirectToAction("Details", new { id = boardId });
-        }
-        [HttpPost]
-        public async Task<IActionResult> UpdateTaskStatus(string taskId, string newColumnId)
-        {
-            // Chama o BoardService para atualizar no Supabase
-            // Retorna JSON para o JavaScript lidar na tela
-            return Json(new { success = true });
-        }
-
-        //[HttpPost]
-        //public async Task<IActionResult> CreateTask([FromBody] TaskDto taskData)
-        //{
-        //    // Cria tarefa e retorna os dados recém criados
-        //    return Json(new { success = true, data = newTask });
-        //}
-    }
-    // Adicione isto no final do arquivo, antes da última chave "}"
-    public class UpdateTaskStatusRequest
-    {
-        public Guid TaskId { get; set; }
-        public string NewStatus { get; set; }
     }
 }

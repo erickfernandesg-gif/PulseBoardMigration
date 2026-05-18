@@ -1,18 +1,20 @@
-﻿<div id="createTaskModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-sm transition-opacity">
-    <div class="flex min-h-screen items-center justify-center p-4">
-        <div class="w-full max-w-lg transform overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all">
+﻿@model PulseBoardMigration.Models.BoardDetailsViewModel
 
-            <div class="flex items-center justify-between mb-6">
+<div id="createTaskModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-sm transition-opacity">
+    <div class="flex min-h-screen items-center justify-center p-4">
+        <div class="w-full max-w-xl transform overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all flex flex-col max-h-[90vh]">
+
+            <div class="flex items-center justify-between mb-6 shrink-0">
                 <h3 class="text-lg font-bold text-slate-900">Nova Tarefa</h3>
                 <button type="button" onclick="closeCreateTaskModal()" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
                     <i data-lucide="x" class="h-5 w-5"></i>
                 </button>
             </div>
 
-            <form id="createTaskForm" asp-controller="Boards" asp-action="CreateTask" method="post">
+            <form id="createTaskForm" asp-controller="Boards" asp-action="CreateTask" method="post" class="flex flex-col overflow-hidden">
                 <input type="hidden" id="TaskBoardId" name="boardId" value="@Model.Board.Id" />
 
-                <div class="space-y-4">
+                <div class="space-y-5 overflow-y-auto px-1 pb-2">
                     <div>
                         <label for="Title" class="block text-sm font-semibold text-slate-700 mb-1">Título da Tarefa <span class="text-red-500">*</span></label>
                         <input type="text" id="Title" name="title" required class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" placeholder="O que precisa ser feito?" />
@@ -72,9 +74,45 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="CreateDepartment" class="block text-sm font-semibold text-slate-700 mb-1">Departamento</label>
+                            <select id="CreateDepartment" name="department" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
+                                <option value="">Geral</option>
+                                <option value="TI">Tecnologia (TI)</option>
+                                <option value="Marketing">Marketing</option>
+                                <option value="Financeiro">Financeiro</option>
+                                <option value="Comercial">Vendas / Comercial</option>
+                                <option value="RH">Recursos Humanos</option>
+                                <option value="Operacoes">Operações</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="CreateRiskLevel" class="block text-sm font-semibold text-slate-700 mb-1">Risco / Bloqueio</label>
+                            <select id="CreateRiskLevel" name="riskLevel" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
+                                <option value="Nenhum" selected>Nenhum Risco</option>
+                                <option value="Baixo">Risco Baixo</option>
+                                <option value="Medio">Risco Médio</option>
+                                <option value="Alto">Risco Alto</option>
+                                <option value="Critico">Crítico / Bloqueado</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="CreateStoryPoints" class="block text-sm font-semibold text-slate-700 mb-1">Esforço (Pontos/Horas)</label>
+                            <input type="number" id="CreateStoryPoints" name="storyPoints" min="0" placeholder="Ex: 5" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" />
+                        </div>
+                        <div>
+                            <label for="CreateTags" class="block text-sm font-semibold text-slate-700 mb-1">Etiquetas</label>
+                            <input type="text" id="CreateTags" name="tags" placeholder="Ex: bug, urgente" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" />
+                        </div>
+                    </div>
                 </div>
 
-                <div class="mt-8 flex justify-end gap-3 border-t border-slate-100 pt-5">
+                <div class="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5 shrink-0">
                     <button type="button" onclick="closeCreateTaskModal()" class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Cancelar</button>
                     <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200 flex items-center gap-2">
                         <i data-lucide="plus" class="h-4 w-4"></i>
