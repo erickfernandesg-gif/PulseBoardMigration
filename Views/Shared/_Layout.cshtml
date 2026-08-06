@@ -1,33 +1,38 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - PulseBoard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/lucide@0.468.0"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/frappe-gantt/0.6.1/frappe-gantt.css" />
+    <style>
+        .label { display:block; margin-bottom:.4rem; font-size:.68rem; line-height:1rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#64748b; }
+        .field { width:100%; border:1px solid #e2e8f0; border-radius:.65rem; background:#f8fafc; padding:.65rem .8rem; font-size:.875rem; outline:none; }
+        .field:focus { border-color:#6366f1; box-shadow:0 0 0 3px rgba(99,102,241,.12); background:white; }
+    </style>
 </head>
-<body class="flex h-screen overflow-hidden bg-slate-50 text-slate-900 font-sans antialiased">
-
+<body class="flex h-screen overflow-hidden bg-slate-50 text-slate-900 antialiased">
     @await Html.PartialAsync("_MobileSidebar")
-
     @await Html.PartialAsync("_Sidebar")
-
-    <div class="flex flex-1 flex-col overflow-hidden">
-
+    <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
         @await Html.PartialAsync("_Topbar")
-
         <main class="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
             <div class="mx-auto max-w-7xl">
+                @if (TempData["Success"] is string success)
+                {
+                    <div class="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">@success</div>
+                }
+                @if (TempData["Error"] is string error)
+                {
+                    <div class="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">@error</div>
+                }
                 @RenderBody()
             </div>
         </main>
-
     </div>
-
-    <script>
-        lucide.createIcons();
-    </script>
+    <script>window.lucide?.createIcons();</script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

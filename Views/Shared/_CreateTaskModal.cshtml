@@ -1,125 +1,33 @@
-﻿@model PulseBoardMigration.Models.BoardDetailsViewModel
-
-<div id="createTaskModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-sm transition-opacity">
-    <div class="flex min-h-screen items-center justify-center p-4">
-        <div class="w-full max-w-xl transform overflow-hidden rounded-2xl bg-white p-6 shadow-2xl transition-all flex flex-col max-h-[90vh]">
-
-            <div class="flex items-center justify-between mb-6 shrink-0">
-                <h3 class="text-lg font-bold text-slate-900">Nova Tarefa</h3>
-                <button type="button" onclick="closeCreateTaskModal()" class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                    <i data-lucide="x" class="h-5 w-5"></i>
-                </button>
-            </div>
-
-            <form id="createTaskForm" asp-controller="Boards" asp-action="CreateTask" method="post" class="flex flex-col overflow-hidden">
-                <input type="hidden" id="TaskBoardId" name="boardId" value="@Model.Board.Id" />
-
-                <div class="space-y-5 overflow-y-auto px-1 pb-2">
-                    <div>
-                        <label for="Title" class="block text-sm font-semibold text-slate-700 mb-1">Título da Tarefa <span class="text-red-500">*</span></label>
-                        <input type="text" id="Title" name="title" required class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" placeholder="O que precisa ser feito?" />
-                    </div>
-
-                    <div>
-                        <label for="Description" class="block text-sm font-semibold text-slate-700 mb-1">Descrição</label>
-                        <textarea id="Description" name="description" rows="3" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" placeholder="Adicione mais detalhes..."></textarea>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label for="CreateColumnId" class="block text-sm font-semibold text-slate-700 mb-1">Status / Coluna</label>
-                            <select id="CreateColumnId" name="columnId" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
-                                @if (Model.Columns != null)
-                                {
-                                    foreach (var col in Model.Columns)
-                                    {
-                                        <option value="@col.Id">@col.Title</option>
-                                    }
-                                }
-                            </select>
-                        </div>
-                        <div>
-                            <label for="CreateAssigneeId" class="block text-sm font-semibold text-slate-700 mb-1">Responsável</label>
-                            <select id="CreateAssigneeId" name="assigneeId" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
-                                <option value="">Não atribuído</option>
-                                @if (ViewData["Users"] != null)
-                                {
-                                    foreach (var user in (IEnumerable<User>)ViewData["Users"])
-                                    {
-                                        <option value="@user.Id">@user.Name</option>
-                                    }
-                                }
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label for="Priority" class="block text-sm font-semibold text-slate-700 mb-1">Prioridade</label>
-                            <select id="Priority" name="priority" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
-                                <option value="Baixa">Baixa</option>
-                                <option value="Média" selected>Média</option>
-                                <option value="Alta">Alta</option>
-                                <option value="Urgente">Urgente</option>
-                            </select>
-                        </div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label for="StartDate" class="block text-sm font-semibold text-slate-700 mb-1">Início</label>
-                                <input type="date" id="StartDate" name="startDate" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-600 transition-all" />
-                            </div>
-                            <div>
-                                <label for="DueDate" class="block text-sm font-semibold text-slate-700 mb-1">Entrega</label>
-                                <input type="date" id="DueDate" name="dueDate" class="w-full rounded-lg border border-slate-200 px-2 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-slate-600 transition-all" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label for="CreateDepartment" class="block text-sm font-semibold text-slate-700 mb-1">Departamento</label>
-                            <select id="CreateDepartment" name="department" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
-                                <option value="">Geral</option>
-                                <option value="TI">Tecnologia (TI)</option>
-                                <option value="Marketing">Marketing</option>
-                                <option value="Financeiro">Financeiro</option>
-                                <option value="Comercial">Vendas / Comercial</option>
-                                <option value="RH">Recursos Humanos</option>
-                                <option value="Operacoes">Operações</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label for="CreateRiskLevel" class="block text-sm font-semibold text-slate-700 mb-1">Risco / Bloqueio</label>
-                            <select id="CreateRiskLevel" name="riskLevel" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all">
-                                <option value="Nenhum" selected>Nenhum Risco</option>
-                                <option value="Baixo">Risco Baixo</option>
-                                <option value="Medio">Risco Médio</option>
-                                <option value="Alto">Risco Alto</option>
-                                <option value="Critico">Crítico / Bloqueado</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-4">
-                        <div>
-                            <label for="CreateStoryPoints" class="block text-sm font-semibold text-slate-700 mb-1">Esforço (Pontos/Horas)</label>
-                            <input type="number" id="CreateStoryPoints" name="storyPoints" min="0" placeholder="Ex: 5" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" />
-                        </div>
-                        <div>
-                            <label for="CreateTags" class="block text-sm font-semibold text-slate-700 mb-1">Etiquetas</label>
-                            <input type="text" id="CreateTags" name="tags" placeholder="Ex: bug, urgente" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" />
-                        </div>
-                    </div>
-                </div>
-
-                <div class="mt-6 flex justify-end gap-3 border-t border-slate-100 pt-5 shrink-0">
-                    <button type="button" onclick="closeCreateTaskModal()" class="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">Cancelar</button>
-                    <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200 flex items-center gap-2">
-                        <i data-lucide="plus" class="h-4 w-4"></i>
-                        Criar Tarefa
-                    </button>
-                </div>
-            </form>
+@model PulseBoardMigration.Models.BoardDetailsViewModel
+<div id="createTaskModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+    <div class="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+        <div class="mb-6 flex items-center justify-between">
+            <div><h2 class="text-xl font-bold">Nova demanda</h2><p class="text-sm text-slate-500">Escopo, planejamento e responsáveis.</p></div>
+            <button type="button" onclick="closeCreateTaskModal()" class="rounded-lg p-2 hover:bg-slate-100">✕</button>
         </div>
+        <form id="createTaskForm" asp-controller="Boards" asp-action="CreateTask" method="post" class="grid gap-6 md:grid-cols-2">
+            <input type="hidden" name="boardId" value="@Model.Board.Id" />
+            <div class="space-y-4">
+                <div><label class="label">Título *</label><input name="title" required maxlength="200" class="field" /></div>
+                <div><label class="label">Descrição</label><textarea name="description" rows="4" maxlength="5000" class="field"></textarea></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="label">Etapa</label><select id="CreateColumnId" name="columnId" class="field">@foreach (var c in Model.Columns){<option value="@c.Id">@c.Title</option>}</select></div>
+                    <div><label class="label">Prioridade</label><select name="priority" class="field"><option value="low">Baixa</option><option value="medium" selected>Média</option><option value="high">Alta</option><option value="critical">Crítica</option></select></div>
+                </div>
+                <div><label class="label">Cliente</label><select name="clientId" class="field"><option value="">Operação interna</option>@foreach(var c in Model.Clients){<option value="@c.Id">@c.Name</option>}</select></div>
+            </div>
+            <div class="space-y-4">
+                <div><label class="label">Responsável</label><select name="assignedTo" class="field"><option value="">Sem responsável</option>@foreach(var p in Model.Profiles){<option value="@p.Id">@(p.FullName ?? p.Email)</option>}</select></div>
+                <div><label class="label">Colaboradores</label><div class="grid max-h-28 grid-cols-2 gap-2 overflow-y-auto rounded-lg border border-slate-200 p-3">@foreach(var p in Model.Profiles){<label class="flex items-center gap-2 text-xs"><input type="checkbox" name="collaboratorIds" value="@p.Id" /> @(p.FullName ?? p.Email)</label>}</div></div>
+                <div class="grid grid-cols-2 gap-3"><div><label class="label">Início</label><input id="CreateStartDate" type="date" name="startDate" class="field" /></div><div><label class="label">Prazo</label><input id="CreateDueDate" type="date" name="dueDate" class="field" /></div></div>
+                <div><label class="label">Ciclo</label><input type="month" name="targetMonth" class="field" /></div>
+                <div><label class="label">Estimativa</label><div class="grid grid-cols-2 gap-3"><input type="number" min="0" max="100000" name="estimatedHours" placeholder="Horas" class="field" /><input type="number" min="0" max="59" name="estimatedMinutes" placeholder="Minutos" class="field" /></div></div>
+            </div>
+            <div id="createTaskError" role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 md:col-span-2"></div>
+            <div class="flex justify-end gap-3 border-t border-slate-100 pt-5 md:col-span-2">
+                <button type="button" onclick="closeCreateTaskModal()" class="rounded-lg px-4 py-2 text-sm font-bold text-slate-500">Cancelar</button>
+                <button type="submit" class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white">Criar demanda</button>
+            </div>
+        </form>
     </div>
 </div>

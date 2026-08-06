@@ -1,12 +1,21 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using PulseBoardMigration.Services;
 
-namespace PulseBoardMigration.Controllers
+namespace PulseBoardMigration.Controllers;
+
+[Authorize]
+public class FormsController : Controller
 {
-    public class FormsController : Controller
+    private readonly BoardService _boardService;
+
+    public FormsController(BoardService boardService)
     {
-        public IActionResult Index()
-        {
-            return View();
-        }
+        _boardService = boardService;
+    }
+
+    public async Task<IActionResult> Index()
+    {
+        return View(await _boardService.GetBoardsAsync());
     }
 }

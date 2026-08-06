@@ -1,87 +1,50 @@
-﻿@{
-    // Pega a primeira letra do email para o Avatar
-    var initial = User.Identity?.Name?.FirstOrDefault().ToString().ToUpper() ?? "U";
-    var currentPath = Context.Request.Path.Value ?? "/";
+@{
+    var path = Context.Request.Path.Value ?? "/";
+    var links = new[]
+    {
+        ("/Dashboard", "layout-dashboard", "Dashboard"),
+        ("/Work", "list-checks", "Meu trabalho"),
+        ("/Boards", "kanban-square", "Quadros"),
+        ("/Management", "users-round", "Gestão da equipe"),
+        ("/Schedule", "calendar-range", "Cronograma"),
+        ("/Billing", "badge-dollar-sign", "Faturamento"),
+        ("/Executive", "chart-no-axes-combined", "Painel executivo"),
+        ("/Reports", "file-chart-column", "Relatórios"),
+        ("/Forms", "clipboard-list", "Formulários"),
+        ("/Automations", "workflow", "Automações"),
+        ("/Admin", "shield-check", "Administração"),
+        ("/Settings", "settings", "Configurações")
+    };
 }
-
-<aside id="desktopSidebar" class="relative hidden h-screen flex-col border-r border-slate-200 bg-white transition-all duration-300 md:flex w-64">
-
-    <div class="flex h-16 shrink-0 items-center justify-between border-b border-slate-100 px-6">
-        <div class="flex items-center gap-2 overflow-hidden sidebar-logo-container">
-            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold shadow-sm">
-                <i data-lucide="activity" class="h-5 w-5"></i>
-            </div>
-            <span class="text-xl font-bold tracking-tight text-slate-900 sidebar-text">PulseBoard</span>
-        </div>
-        <button id="toggleSidebarBtn" class="flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-            <i data-lucide="chevron-left" id="toggleIcon" class="h-4 w-4"></i>
-        </button>
+<aside id="desktopSidebar" class="relative hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
+    <div class="flex h-16 items-center gap-3 border-b border-slate-100 px-5">
+        <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white"><i data-lucide="activity" class="h-5 w-5"></i></div>
+        <strong class="sidebar-text text-lg">PulseBoard</strong>
+        <button id="toggleSidebarBtn" class="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-100"><i id="toggleIcon" data-lucide="panel-left-close" class="h-4 w-4"></i></button>
     </div>
-
-    <div class="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-1">
-        <div class="mb-4 px-3 text-xs font-semibold tracking-wider text-slate-400 uppercase sidebar-text">Principal</div>
-
-        <a href="/Dashboard" class="group flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors @(currentPath == "/Dashboard" ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")">
-            <i data-lucide="layout-grid" class="h-5 w-5 shrink-0 @(currentPath == "/Dashboard" ? "text-indigo-600" : "text-slate-400 group-hover:text-slate-600")"></i>
-            <span class="ml-3 sidebar-text">Dashboard</span>
-        </a>
-
-        <a href="/Boards" class="group flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors @(currentPath.StartsWith("/Boards") ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")">
-            <i data-lucide="kanban-square" class="h-5 w-5 shrink-0 @(currentPath.StartsWith("/Boards") ? "text-indigo-600" : "text-slate-400 group-hover:text-slate-600")"></i>
-            <span class="ml-3 sidebar-text">Meus Quadros</span>
-        </a>
-
-        <a href="/Executive" class="group flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors @(currentPath.StartsWith("/Executive") ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900")">
-            <i data-lucide="trending-up" class="h-5 w-5 shrink-0 @(currentPath.StartsWith("/Executive") ? "text-indigo-600" : "text-slate-400 group-hover:text-slate-600")"></i>
-            <span class="ml-3 sidebar-text">Painel Executivo</span>
-        </a>
-    </div>
-
-    <div class="border-t border-slate-100 p-4">
-        <div class="flex items-center gap-3 rounded-xl bg-slate-50 border border-slate-100 p-3 mb-2 sidebar-profile-container">
-            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-sm uppercase shadow-sm">
-                @initial
-            </div>
-            <div class="flex flex-col flex-1 min-w-0 sidebar-text">
-                <span class="text-sm font-bold text-slate-900 truncate">@User.Identity?.Name</span>
-            </div>
-        </div>
-
-        <a href="/Auth/Logout" class="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 border border-transparent hover:border-red-100 sidebar-logout-btn">
-            <i data-lucide="log-out" class="h-4 w-4"></i>
-            <span class="sidebar-text">Encerrar Sessão</span>
-        </a>
-    </div>
-</aside>
-
-<script>
-    // Lógica para recolher a barra (substitui o useState do React)
-    const sidebar = document.getElementById('desktopSidebar');
-    const toggleBtn = document.getElementById('toggleSidebarBtn');
-    const toggleIcon = document.getElementById('toggleIcon');
-    const textElements = document.querySelectorAll('.sidebar-text');
-    let isCollapsed = localStorage.getItem('pulseboard_sidebar_collapsed') === 'true';
-
-    function applyCollapseState() {
-        if (isCollapsed) {
-            sidebar.classList.remove('w-64');
-            sidebar.classList.add('w-20');
-            toggleIcon.setAttribute('data-lucide', 'chevron-right');
-            textElements.forEach(el => el.style.display = 'none');
-        } else {
-            sidebar.classList.remove('w-20');
-            sidebar.classList.add('w-64');
-            toggleIcon.setAttribute('data-lucide', 'chevron-left');
-            textElements.forEach(el => el.style.display = 'block');
+    <nav class="flex-1 space-y-1 overflow-y-auto p-3">
+        @foreach (var link in links)
+        {
+            var active = path.StartsWith(link.Item1, StringComparison.OrdinalIgnoreCase);
+            <a href="@link.Item1" title="@link.Item3" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold @(active ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50")">
+                <i data-lucide="@link.Item2" class="h-5 w-5 shrink-0"></i><span class="sidebar-text">@link.Item3</span>
+            </a>
         }
-        lucide.createIcons(); // Recarrega o ícone que mudou
-    }
-
-    applyCollapseState(); // Aplica no load
-
-    toggleBtn.addEventListener('click', () => {
-        isCollapsed = !isCollapsed;
-        localStorage.setItem('pulseboard_sidebar_collapsed', isCollapsed);
-        applyCollapseState();
-    });
+    </nav>
+    <div class="border-t border-slate-100 p-4 text-xs text-slate-500"><span class="sidebar-text truncate">@User.Identity?.Name</span></div>
+</aside>
+<script>
+(() => {
+    const sidebar = document.getElementById('desktopSidebar');
+    const button = document.getElementById('toggleSidebarBtn');
+    if (!sidebar || !button) return;
+    let collapsed = localStorage.getItem('pulseboard.sidebar') === 'collapsed';
+    const apply = () => {
+        sidebar.classList.toggle('w-64', !collapsed);
+        sidebar.classList.toggle('w-20', collapsed);
+        sidebar.querySelectorAll('.sidebar-text').forEach(x => x.classList.toggle('hidden', collapsed));
+    };
+    apply();
+    button.addEventListener('click', () => { collapsed = !collapsed; localStorage.setItem('pulseboard.sidebar', collapsed ? 'collapsed' : 'open'); apply(); });
+})();
 </script>

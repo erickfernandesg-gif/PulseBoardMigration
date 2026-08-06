@@ -1,5 +1,41 @@
-﻿@*
-    For more information on enabling MVC for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
-*@
+@model PulseBoardMigration.Models.DashboardViewModel
 @{
+    ViewData["Title"] = "Dashboard";
 }
+<div class="mb-8"><h1 class="text-3xl font-bold">Dashboard operacional</h1><p class="mt-1 text-sm text-slate-500">Visão consolidada da operação e dos prazos.</p></div>
+<div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <a href="/Work" class="rounded-2xl border border-slate-200 bg-white p-5 hover:border-indigo-300"><p class="text-xs font-bold uppercase text-slate-400">Minhas ações</p><p class="mt-2 text-3xl font-bold text-indigo-600">@Model.MyActiveTasks</p></a>
+    <a href="/Work" class="rounded-2xl border border-slate-200 bg-white p-5 hover:border-amber-300"><p class="text-xs font-bold uppercase text-slate-400">Aguardando terceiros</p><p class="mt-2 text-3xl font-bold text-amber-600">@Model.WaitingOnOthers</p></a>
+    <a href="/Work" class="rounded-2xl border border-slate-200 bg-white p-5 hover:border-emerald-300"><p class="text-xs font-bold uppercase text-slate-400">Aguardando meu aceite</p><p class="mt-2 text-3xl font-bold text-emerald-600">@Model.WaitingMyReview</p></a>
+    <div class="rounded-2xl border border-slate-200 bg-white p-5"><p class="text-xs font-bold uppercase text-slate-400">Atrasadas visíveis</p><p class="mt-2 text-3xl font-bold text-red-600">@Model.OverdueTasks</p></div>
+</div>
+<section class="mt-6 rounded-2xl border border-slate-200 bg-white p-5"><div class="mb-4 flex items-center justify-between"><h2 class="text-lg font-bold">Prioridades pessoais</h2><a href="/Work" class="text-sm font-bold text-indigo-600">Abrir Meu trabalho</a></div><div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">@foreach(var task in Model.Tasks.Where(x=>x.AssignedTo==Model.CurrentUserId&&x.Status!="done").OrderBy(x=>x.DueDate??DateTime.MaxValue).Take(6)){<a href="/Boards/Details/@task.BoardId" class="rounded-xl bg-slate-50 p-4 hover:bg-indigo-50"><span class="text-[10px] font-bold uppercase text-slate-400">@task.Status</span><strong class="mt-1 block">@task.Title</strong><span class="mt-2 block text-xs @(task.DueDate<DateTime.UtcNow.Date?"font-bold text-red-600":"text-slate-500")">@(task.DueDate?.ToString("dd/MM/yyyy")??"Sem prazo")</span></a>}</div></section>
+<div class="mt-8 grid gap-6 lg:grid-cols-2">
+    <section class="rounded-2xl border border-slate-200 bg-white p-6">
+        <div class="mb-5 flex items-center justify-between"><h2 class="text-lg font-bold">Seus quadros</h2><a href="/Boards" class="text-sm font-bold text-indigo-600">Ver todos</a></div>
+        <div class="grid gap-3 sm:grid-cols-2">
+            @foreach (var board in Model.Boards.Take(6))
+            {
+                <a data-searchable href="/Boards/Details/@board.Id" class="rounded-xl border border-slate-100 bg-slate-50 p-4 hover:border-indigo-300 hover:bg-white">
+                    <h3 class="font-bold">@board.Name</h3><p class="mt-1 line-clamp-2 text-xs text-slate-500">@board.Description</p>
+                    <p class="mt-3 text-[10px] font-bold uppercase text-slate-400">@Model.Tasks.Count(t => t.BoardId == board.Id && t.Status != "done") abertas</p>
+                </a>
+            }
+        </div>
+    </section>
+    <section class="rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 class="mb-5 text-lg font-bold">Radar de comunicação</h2>
+        @if (!Model.RecentComments.Any()) { <p class="text-sm italic text-slate-400">Nenhum comentário recente.</p> }
+        <div class="space-y-3">
+            @foreach (var comment in Model.RecentComments)
+            {
+                var profile = Model.Profiles.FirstOrDefault(p => p.Id == comment.UserId);
+                var task = Model.Tasks.FirstOrDefault(t => t.Id == comment.TaskId);
+                <a data-searchable href="/Boards/Details/@task?.BoardId" class="block rounded-xl bg-slate-50 p-3">
+                    <p class="text-xs font-bold text-indigo-700">@(profile?.FullName ?? profile?.Email ?? "Usuário") · @task?.Title</p>
+                    <p class="mt-1 line-clamp-2 text-sm text-slate-600">@comment.Content</p>
+                </a>
+            }
+        </div>
+    </section>
+</div>

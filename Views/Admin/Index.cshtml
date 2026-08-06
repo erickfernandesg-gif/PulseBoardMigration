@@ -1,0 +1,46 @@
+@model PulseBoardMigration.Models.AdminViewModel
+@{ ViewData["Title"] = "Administração"; }
+<div class="mb-8"><h1 class="text-2xl font-bold">Administração</h1><p class="text-sm text-slate-500">Pessoas, equipes, clientes e custos.</p></div>
+<div class="grid gap-6 xl:grid-cols-3">
+    <section class="rounded-2xl border border-slate-200 bg-white p-6 xl:col-span-2">
+        <details class="mb-6 rounded-xl border border-indigo-100 bg-indigo-50 p-4">
+            <summary class="cursor-pointer text-sm font-bold text-indigo-700">Cadastrar novo usuário</summary>
+            <form asp-action="CreateUser" method="post" class="mt-4 grid gap-3 md:grid-cols-2">
+                <input name="fullName" required class="field" placeholder="Nome completo" />
+                <input name="email" type="email" required class="field" placeholder="E-mail corporativo" />
+                <input name="password" type="password" minlength="6" required class="field" placeholder="Senha provisória" />
+                <select name="role" class="field"><option value="user">Colaborador</option><option value="manager">Gestor</option><option value="admin">Administrador</option></select>
+                <select name="teamId" class="field"><option value="">Sem equipe</option>@foreach(var team in Model.Teams){<option value="@team.Id">@team.Name</option>}</select>
+                <input name="hourlyRate" type="number" step="0.01" min="0" class="field" placeholder="Custo por hora" />
+                <button class="rounded-lg bg-indigo-600 py-2.5 text-sm font-bold text-white md:col-span-2">Criar acesso</button>
+            </form>
+        </details>
+        <h2 class="mb-4 text-lg font-bold">Equipe</h2>
+        <div class="space-y-3">
+            @foreach (var profile in Model.Profiles)
+            {
+                var rate = Model.Rates.FirstOrDefault(r => r.UserId == profile.Id)?.HourlyRate ?? 0;
+                <form asp-action="UpdateUser" method="post" data-searchable class="grid gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3 md:grid-cols-6">
+                    <input type="hidden" name="id" value="@profile.Id" />
+                    <input name="fullName" value="@profile.FullName" class="field md:col-span-2" />
+                    <select name="role" class="field"><option value="user" selected="@(profile.Role == "user")">Colaborador</option><option value="manager" selected="@(profile.Role == "manager")">Gestor</option><option value="admin" selected="@(profile.Role == "admin")">Admin</option></select>
+                    <select name="teamId" class="field"><option value="">Sem equipe</option>@foreach(var team in Model.Teams){<option value="@team.Id" selected="@(profile.TeamId == team.Id)">@team.Name</option>}</select>
+                    <input type="number" step="0.01" min="0" name="hourlyRate" value="@rate.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" class="field" />
+                    <div class="flex gap-1"><button class="flex-1 rounded-lg bg-indigo-600 px-2 text-xs font-bold text-white">Salvar</button><button type="submit" formaction="/Admin/DeleteUser" onclick="return confirm('Remover definitivamente este usuário?')" class="rounded-lg px-2 text-red-600">×</button></div>
+                </form>
+            }
+        </div>
+    </section>
+    <section class="space-y-6">
+        <div class="rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 class="mb-4 text-lg font-bold">Equipes</h2>
+            <form asp-action="SaveTeam" method="post" class="space-y-2"><input name="Name" required class="field" placeholder="Nome da equipe" /><textarea name="Description" class="field" placeholder="Descrição"></textarea><button class="w-full rounded-lg bg-slate-900 py-2 text-sm font-bold text-white">Adicionar equipe</button></form>
+            <div class="mt-4 space-y-2">@foreach(var team in Model.Teams){<div data-searchable class="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm"><span><strong>@team.Name</strong><small class="block text-slate-400">@team.Description</small></span><form asp-action="DeleteTeam" method="post" onsubmit="return confirm('Excluir equipe?')"><input type="hidden" name="id" value="@team.Id"/><button class="text-red-500">Excluir</button></form></div>}</div>
+        </div>
+        <div class="rounded-2xl border border-slate-200 bg-white p-6">
+            <h2 class="mb-4 text-lg font-bold">Clientes</h2>
+            <form asp-action="SaveClient" method="post" class="space-y-2"><input name="Name" required class="field" placeholder="Nome do cliente" /><input name="Email" type="email" class="field" placeholder="E-mail" /><input name="Phone" class="field" placeholder="Telefone" /><button class="w-full rounded-lg bg-slate-900 py-2 text-sm font-bold text-white">Adicionar cliente</button></form>
+            <div class="mt-4 space-y-2">@foreach(var client in Model.Clients){<div data-searchable class="flex items-center justify-between rounded-lg bg-slate-50 p-3 text-sm"><span><strong>@client.Name</strong><small class="block text-slate-400">@client.Email</small></span><form asp-action="DeleteClient" method="post" onsubmit="return confirm('Excluir cliente?')"><input type="hidden" name="id" value="@client.Id"/><button class="text-red-500">Excluir</button></form></div>}</div>
+        </div>
+    </section>
+</div>

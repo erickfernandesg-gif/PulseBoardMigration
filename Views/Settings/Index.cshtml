@@ -1,0 +1,15 @@
+@model PulseBoardMigration.Models.SettingsViewModel
+@{ ViewData["Title"] = "Configurações"; }
+<div class="mb-8"><h1 class="text-2xl font-bold">Configurações e perfil</h1><p class="text-sm text-slate-500">Gerencie suas informações pessoais.</p></div>
+<div class="max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 bg-slate-50/70 p-6"><h2 class="text-lg font-bold">Informações pessoais</h2><p class="text-xs text-slate-500">Nome e dados da conta.</p></div>
+    <form asp-action="UpdateProfile" method="post" class="p-6">
+        <div class="mb-8 flex items-center gap-5">
+            <div class="flex h-20 w-20 items-center justify-center rounded-full bg-indigo-600 text-2xl font-bold text-white">@((Model.Profile.FullName ?? Model.Profile.Email).FirstOrDefault().ToString().ToUpperInvariant())</div>
+            <div><p class="font-bold">@Model.Profile.Email</p><span class="mt-1 inline-block rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-bold uppercase text-indigo-700">@Model.Profile.Role</span></div>
+        </div>
+        <div><label class="label">Nome completo</label><input name="fullName" value="@Model.Profile.FullName" required class="field" /></div>
+        <div class="mt-5"><label class="label">E-mail de acesso</label><input value="@Model.Profile.Email" disabled class="field cursor-not-allowed text-slate-400" /></div>
+        <div class="mt-7 flex justify-end"><button class="rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white">Salvar alterações</button></div>
+    </form>
+</div>

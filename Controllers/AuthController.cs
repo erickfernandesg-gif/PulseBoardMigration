@@ -1,73 +1,97 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.Threading.Tasks;
-using PulseBoardMigration.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using PulseBoardMigration.Services;
 using System.Security.Claims;
-using System.Collections.Generic;
 
-namespace PulseBoardMigration.Controllers
+namespace PulseBoardMigration.Controllers;
+
+[AllowAnonymous]
+public class AuthController : Controller
 {
-    public class AuthController : Controller
+    private readonly AuthService _authService;
+
+    public AuthController(AuthService authService)
     {
-        private readonly AuthService _authService;
+        _authService = authService;
+    }
 
-        public AuthController(AuthService authService)
+    [HttpGet]
+    public IActionResult Login(string? returnUrl = null)
+    {
+        if (User.Identity?.IsAuthenticated == true)
         {
-            _authService = authService;
+            return RedirectToAction("Index", "Dashboard");
         }
 
-        // 1. Mostra a tela visual (GET)
-        [HttpGet]
-        public IActionResult Login()
-        {
-            return View();
-        }
+        ViewData["ReturnUrl"] = returnUrl;
+        return View();
+    }
 
-        // 2. Recebe os dados quando o usuário clica em "Entrar" (POST)
-        [HttpPost]
-        public async Task<IActionResult> Login(string email, string password)
+    [HttpPost]
+    public async Task<IActionResult> Login(string email, string password, string? returnUrl = null)
+    {
+        try
         {
-            try
+            var session = await _authService.LoginAsync(email, password);
+            if (session?.User != null)
             {
-                // Tenta logar no Supabase
-                var session = await _authService.LoginAsync(email, password);
-
-                if (session?.User != null)
+                var claims = new List<Claim>
                 {
-                    // Se deu certo, criamos o "Crachá" (Cookie) do C#
-                    var claims = new List<Claim>
-                    {
-                        new Claim(ClaimTypes.Name, session.User.Email),
-                        new Claim(ClaimTypes.NameIdentifier, session.User.Id)
-                    };
+                    new(ClaimTypes.Name, session.User.Email ?? email),
+                    new(ClaimTypes.Email, session.User.Email ?? email),
+                    new(ClaimTypes.NameIdentifier, session.User.Id ?? string.Empty)
+                };
 
-                    var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+                var identity = new ClaimsIdentity(
+                    claims,
+                    CookieAuthenticationDefaults.AuthenticationScheme);
+                var properties = new AuthenticationProperties
+                {
+                    IsPersistent = true,
+                    ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8)
+                };
+                properties.StoreTokens(new[]
+                {
+                    new AuthenticationToken { Name = "access_token", Value = session.AccessToken ?? string.Empty },
+                    new AuthenticationToken { Name = "refresh_token", Value = session.RefreshToken ?? string.Empty }
+                });
 
-                    await HttpContext.SignInAsync(
-                        CookieAuthenticationDefaults.AuthenticationScheme,
-                        new ClaimsPrincipal(claimsIdentity));
+                await HttpContext.SignInAsync(
+                    CookieAuthenticationDefaults.AuthenticationScheme,
+                    new ClaimsPrincipal(identity),
+                    properties);
 
-                    // Redireciona para a lista de Quadros
-                    return RedirectToAction("Index", "Boards");
-                }
+                return Url.IsLocalUrl(returnUrl)
+                    ? LocalRedirect(returnUrl!)
+                    : RedirectToAction("Index", "Dashboard");
             }
-            catch
-            {
-                // Se der erro (senha errada), mostra a mensagem
-                ViewBag.ErrorMessage = "E-mail ou senha incorretos.";
-            }
-
-            return View();
+        }
+        catch
+        {
+            ModelState.AddModelError(string.Empty, "E-mail ou senha incorretos.");
         }
 
-        // 3. Faz o Logout
-        [HttpGet]
-        public async Task<IActionResult> Logout()
+        ViewData["ReturnUrl"] = returnUrl;
+        return View();
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Logout()
+    {
+        try
         {
             await _authService.LogoutAsync();
-            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return RedirectToAction("Login");
         }
+        finally
+        {
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        }
+
+        return RedirectToAction(nameof(Login));
     }
+
+    [HttpGet]
+    public IActionResult AccessDenied() => View();
 }

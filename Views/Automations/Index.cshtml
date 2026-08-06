@@ -1,0 +1,26 @@
+@model List<PulseBoardMigration.Models.AutomationRule>
+@{ ViewData["Title"] = "Automações"; }
+<div class="mb-8"><h1 class="text-2xl font-bold">Automações</h1><p class="text-sm text-slate-500">Regras SE/ENTÃO executadas quando o status muda.</p></div>
+<div class="grid gap-6 lg:grid-cols-3">
+    <form asp-action="Save" method="post" class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 class="text-lg font-bold">Nova regra</h2>
+        <div><label class="label">Nome</label><input name="Title" required class="field" /></div>
+        <div><label class="label">Quando a tarefa chegar em</label><select name="TriggerValue" class="field"><option value="todo">A fazer</option><option value="in-progress">Em execução</option><option value="homologation">Homologação</option><option value="done">Concluído</option></select></div>
+        <input type="hidden" name="TriggerType" value="status_change" />
+        <div><label class="label">Executar</label><select name="ActionType" class="field"><option value="notify_manager">Notificar gestor</option><option value="assign_user">Atribuir usuário</option></select></div>
+        <div><label class="label">Parâmetro da ação</label><input name="ActionPayload" class="field" placeholder="UUID ou e-mail" /></div>
+        <input type="hidden" name="IsActive" value="true" />
+        <button class="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-bold text-white">Criar automação</button>
+    </form>
+    <section class="space-y-3 lg:col-span-2">
+        @if (!Model.Any()){<div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-400">Nenhuma automação configurada.</div>}
+        @foreach(var rule in Model)
+        {
+            <article data-searchable class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center">
+                <div class="flex-1"><div class="flex items-center gap-2"><h3 class="font-bold">@rule.Title</h3><span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase @(rule.IsActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")">@(rule.IsActive ? "Ativa" : "Pausada")</span></div><p class="mt-2 text-sm text-slate-500">Se status = <strong>@rule.TriggerValue</strong>, então <strong>@rule.ActionType</strong> @rule.ActionPayload</p></div>
+                <form asp-action="Toggle" method="post"><input type="hidden" name="id" value="@rule.Id"/><input type="hidden" name="active" value="@(!rule.IsActive)"/><button class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">@(rule.IsActive ? "Pausar" : "Ativar")</button></form>
+                <form asp-action="Delete" method="post" onsubmit="return confirm('Excluir automação?')"><input type="hidden" name="id" value="@rule.Id"/><button class="rounded-lg px-3 py-2 text-xs font-bold text-red-600">Excluir</button></form>
+            </article>
+        }
+    </section>
+</div>

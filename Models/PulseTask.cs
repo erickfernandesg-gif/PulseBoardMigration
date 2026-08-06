@@ -1,77 +1,82 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
 using Postgrest.Attributes;
 using Postgrest.Models;
+using System.ComponentModel.DataAnnotations;
 
-namespace PulseBoardMigration.Models
+namespace PulseBoardMigration.Models;
+
+[Table("tasks")]
+public class PulseTask : BaseModel
 {
-    [Table("tasks")] // Certifique-se de que o nome da tabela no Supabase é realmente 'tasks' (no original era 'pulse_tasks')
-    public class PulseTask : BaseModel
-    {
-        [PrimaryKey("id", false)]
-        public Guid Id { get; set; }
+    [PrimaryKey("id", false)]
+    public Guid Id { get; set; }
 
-        [Column("board_id")]
-        public Guid BoardId { get; set; }
+    [Column("board_id")]
+    public Guid BoardId { get; set; }
 
-        [Column("title")]
-        [Required(ErrorMessage = "O título é obrigatório")]
-        public string Title { get; set; }
+    [Column("title")]
+    [Required(ErrorMessage = "O título é obrigatório.")]
+    public string Title { get; set; } = string.Empty;
 
-        [Column("description")]
-        public string Description { get; set; }
+    [Column("description")]
+    public string? Description { get; set; }
 
-        // É AQUI que o C# liga a tarefa à coluna do JSON (ex: "todo", "done")
-        [Column("status")]
-        public string Status { get; set; }
+    [Column("status")]
+    public string Status { get; set; } = "todo";
 
-        [Column("priority")]
-        public string Priority { get; set; }
+    [Column("priority")]
+    public string Priority { get; set; } = "medium";
 
-        // A posição é vital para fazermos o Drag and Drop funcionar depois!
-        //[Column("position")]
-        //public int Position { get; set; }
+    [Column("start_date")]
+    public DateTime? StartDate { get; set; }
 
-        // ==========================================
-        // CAMPOS PARA GANTT E RESPONSÁVEL
-        // ==========================================
+    [Column("due_date")]
+    public DateTime? DueDate { get; set; }
 
-        [Column("start_date")]
-        public DateTime? StartDate { get; set; }
+    [Column("completed_at")]
+    public DateTime? CompletedAt { get; set; }
 
-        [Column("assignee_id")]
-        public Guid? AssigneeId { get; set; }
+    [Column("assigned_to")]
+    public Guid? AssignedTo { get; set; }
 
-        // ==========================================
-        // NOVOS CAMPOS AVANÇADOS (IGUAIS AO NEXT.JS)
-        // ==========================================
+    [Column("accountable_owner_id")]
+    public Guid? AccountableOwnerId { get; set; }
 
-        [Column("department")]
-        public string Department { get; set; }
+    [Column("created_by")]
+    public Guid? CreatedBy { get; set; }
 
-        [Column("risk_level")]
-        public string RiskLevel { get; set; }
+    [Column("workflow_state")]
+    public string WorkflowState { get; set; } = "inbox";
 
-        [Column("story_points")]
-        public int? StoryPoints { get; set; }
+    [Column("acceptance_by")]
+    public Guid? AcceptanceBy { get; set; }
 
-        // Como recebemos do input HTML uma string separada por vírgulas (ex: "bug, frontend"), 
-        // vamos armazenar como string simples para facilitar a migração.
-        [Column("tags")]
-        public string Tags { get; set; }
+    [Column("accepted_at")]
+    public DateTime? AcceptedAt { get; set; }
 
-        // ==========================================
+    [Column("position_index")]
+    public int PositionIndex { get; set; }
 
-        [Column("due_date")]
-        public DateTime? DueDate { get; set; }
+    [Column("total_minutes_spent")]
+    public int TotalMinutesSpent { get; set; }
 
-        [Column("created_at")]
-        public DateTime CreatedAt { get; set; }
+    [Column("target_month")]
+    public string? TargetMonth { get; set; }
 
-        // Dica de Sênior: Deixei comentado para evitar o mesmo erro do 'boards'. 
-        // Se a sua tabela 'tasks' lá no Supabase também NÃO tiver o 'updated_at', mantenha comentado.
-        // Se tiver, pode remover as "//".
-        // [Column("updated_at")]
-        // public DateTime UpdatedAt { get; set; }
-    }
+    [Column("is_blocked")]
+    public bool IsBlocked { get; set; }
+
+    [Column("blocker_reason")]
+    public string? BlockerReason { get; set; }
+
+    [Column("client_id")]
+    public Guid? ClientId { get; set; }
+
+    [Column("estimated_minutes")]
+    public int EstimatedMinutes { get; set; }
+
+    [Column("created_at")]
+    public DateTime CreatedAt { get; set; }
+
+    [Column("updated_at")]
+    public DateTime UpdatedAt { get; set; }
 }

@@ -1,90 +1,34 @@
-﻿@model PulseBoardMigration.Models.BoardDetailsViewModel
-
+@model PulseBoardMigration.Models.BoardDetailsViewModel
 <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <div class="overflow-x-auto">
-        <table class="w-full border-collapse text-left text-sm text-slate-500">
-            <thead class="bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-200">
-                <tr>
-                    <th scope="col" class="px-6 py-4">Tarefa</th>
-                    <th scope="col" class="px-6 py-4">Status / Coluna</th>
-                    <th scope="col" class="px-6 py-4">Prioridade</th>
-                    <th scope="col" class="px-6 py-4">Data de Entrega</th>
-                    <th scope="col" class="px-6 py-4 text-right">Ações</th>
-                </tr>
+        <table class="w-full text-left text-sm">
+            <thead class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase text-slate-400">
+                <tr><th class="px-5 py-4">Demanda</th><th class="px-5 py-4">Etapa</th><th class="px-5 py-4">Responsável</th><th class="px-5 py-4">Cliente</th><th class="px-5 py-4">Horas</th><th class="px-5 py-4">Prazo</th><th></th></tr>
             </thead>
-            <tbody class="divide-y divide-slate-100 border-t border-slate-100">
-                @if (Model.Tasks == null || !Model.Tasks.Any())
+            <tbody class="divide-y divide-slate-100">
+                @foreach (var task in Model.Tasks)
                 {
-                    <tr>
-                        <td colspan="5" class="px-6 py-10 text-center text-sm text-slate-400 italic">
-                            Nenhuma tarefa encontrada para este quadro.
+                    var profile = Model.Profile(task.AssignedTo);
+                    var client = Model.Client(task.ClientId);
+                    var collaboratorIds = Model.Collaborators.Where(c => c.TaskId == task.Id).Select(c => c.UserId);
+                    <tr class="task-filter-row hover:bg-slate-50" data-target-month="@task.TargetMonth" data-assigned-to="@task.AssignedTo">
+                        <td class="px-5 py-4"><div class="flex items-center gap-2">@if(task.IsBlocked){<i data-lucide="triangle-alert" class="h-4 w-4 text-red-500"></i>}<div><strong class="text-slate-900">@task.Title</strong><p class="max-w-xs truncate text-xs text-slate-400">@task.Description</p></div></div></td>
+                        <td class="px-5 py-4">@Model.Columns.FirstOrDefault(c => c.Id == task.Status)?.Title</td>
+                        <td class="px-5 py-4">@(profile?.FullName ?? "—")</td>
+                        <td class="px-5 py-4">@(client?.Name ?? "Interno")</td>
+                        <td class="px-5 py-4">@((task.TotalMinutesSpent / 60m).ToString("0.#")) / @((task.EstimatedMinutes / 60m).ToString("0.#"))</td>
+                        <td class="px-5 py-4">@(task.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                        <td class="px-5 py-4 text-right">
+                            <button type="button" class="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold"
+                                    data-task-id="@task.Id" data-title="@task.Title" data-description="@task.Description"
+                                    data-status="@task.Status" data-priority="@task.Priority" data-assigned-to="@task.AssignedTo"
+                                    data-client-id="@task.ClientId" data-start-date="@(task.StartDate?.ToString("yyyy-MM-dd"))"
+                                    data-due-date="@(task.DueDate?.ToString("yyyy-MM-dd"))" data-target-month="@task.TargetMonth"
+                                    data-estimated-minutes="@task.EstimatedMinutes" data-is-blocked="@task.IsBlocked.ToString().ToLowerInvariant()"
+                                    data-blocker-reason="@task.BlockerReason" data-collaborators="@string.Join(",", collaboratorIds)"
+                                    onclick="openTaskDetailsModal(this)">Editar</button>
                         </td>
                     </tr>
-                }
-                else
-                {
-                    foreach (var task in Model.Tasks.OrderBy(t => t.CreatedAt))
-                    {
-                        var columnName = Model.Board.Settings?.FirstOrDefault(s => s.Id == task.Status)?.Title ?? task.Status;
-
-                        <tr class="hover:bg-slate-50/70 transition-colors">
-                            <td class="px-6 py-4 font-medium text-slate-900">
-                                <div class="flex flex-col">
-                                    <span class="text-sm font-semibold text-slate-900">@task.Title</span>
-                                    @if (!string.IsNullOrEmpty(task.Description))
-                                    {
-                                        <span class="text-xs text-slate-400 line-clamp-1 mt-0.5">@task.Description</span>
-                                    }
-                                </div>
-                            </td>
-                            <td class="px-6 py-4">
-                                <span class="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600">
-                                    <span class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
-                                    @columnName
-                                </span>
-                            </td>
-                            <td class="px-6 py-4">
-                                @{
-                                    var priorityClass = task.Priority switch
-                                    {
-                                        "Urgente" => "bg-red-50 text-red-700 ring-red-600/10",
-                                        "Alta" => "bg-amber-50 text-amber-700 ring-amber-600/10",
-                                        "Média" => "bg-indigo-50 text-indigo-700 ring-indigo-600/10",
-                                        _ => "bg-slate-50 text-slate-700 ring-slate-600/10"
-                                    };
-                                }
-                                <span class="inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset @priorityClass">
-                                    @task.Priority
-                                </span>
-                            </td>
-                            <td class="px-6 py-4 text-slate-500">
-                                @if (task.DueDate.HasValue)
-                                {
-                                    <div class="flex items-center gap-1.5 text-xs">
-                                        <i data-lucide="calendar" class="h-3.5 w-3.5 text-slate-400"></i>
-                                        @task.DueDate.Value.ToString("dd/MM/yyyy")
-                                    </div>
-                                }
-                                else
-                                {
-                                    <span class="text-xs text-slate-300">-</span>
-                                }
-                            </td>
-                            <td class="px-6 py-4 text-right">
-                                <button type="button"
-                                        data-task-id="@task.Id"
-                                        data-title="@task.Title"
-                                        data-description="@task.Description"
-                                        data-priority="@task.Priority"
-                                        data-due="@(task.DueDate?.ToString("yyyy-MM-dd"))"
-                                        onclick="openTaskDetailsModal(this)"
-                                        class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 shadow-sm hover:bg-slate-50 transition-all">
-                                    <i data-lucide="edit-3" class="h-3 w-3"></i>
-                                    Editar
-                                </button>
-                            </td>
-                        </tr>
-                    }
                 }
             </tbody>
         </table>

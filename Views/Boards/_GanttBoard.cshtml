@@ -1,121 +1,90 @@
-﻿@model PulseBoardMigration.Models.BoardDetailsViewModel
+@model PulseBoardMigration.Models.BoardDetailsViewModel
+@using System.Text.Json
+@{
+    var scheduledTasks = Model.Tasks
+        .Where(task => task.StartDate.HasValue || task.DueDate.HasValue)
+        .Select(task =>
+        {
+            var start = (task.StartDate ?? task.DueDate!.Value).Date;
+            var end = (task.DueDate ?? task.StartDate!.Value).Date;
+            if (end < start) end = start;
 
-<div class="overflow-hidden rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-    <div class="mb-4 flex items-center justify-between">
+            var calculatedProgress = task.Status == "done"
+                ? 100
+                : task.WorkflowState == "waiting_review"
+                    ? 90
+                    : task.EstimatedMinutes > 0
+                        ? Math.Clamp((int)Math.Round(task.TotalMinutesSpent * 100m / task.EstimatedMinutes), 0, 95)
+                        : task.Status == "in-progress" ? 50 : 0;
+
+            return new
+            {
+                id = task.Id.ToString(),
+                name = task.Title,
+                start = start.ToString("yyyy-MM-dd"),
+                end = end.ToString("yyyy-MM-dd"),
+                progress = calculatedProgress,
+                dependencies = string.Join(",", Model.Dependencies
+                    .Where(dependency => dependency.TaskId == task.Id)
+                    .Select(dependency => dependency.DependsOnTaskId.ToString())),
+                custom_class = task.IsBlocked ? "gantt-blocked" : task.Status == "done" ? "gantt-done" : task.Priority switch
+                {
+                    "critical" => "gantt-critical",
+                    "high" => "gantt-high",
+                    _ => "gantt-normal"
+                },
+                status = task.Status,
+                assignedTo = task.AssignedTo?.ToString() ?? string.Empty,
+                collaborators = string.Join(",", Model.Collaborators.Where(c => c.TaskId == task.Id).Select(c => c.UserId)),
+                targetMonth = task.TargetMonth ?? string.Empty,
+                responsible = Model.Profile(task.AssignedTo)?.FullName ?? "Sem responsável",
+                isBlocked = task.IsBlocked
+            };
+        })
+        .OrderBy(task => task.start)
+        .ToList();
+    var unplannedCount = Model.Tasks.Count(task => !task.StartDate.HasValue && !task.DueDate.HasValue);
+    var ganttJson = JsonSerializer.Serialize(scheduledTasks);
+}
+
+<div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div class="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
-            <h3 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Cronograma do Projeto</h3>
-            <p class="text-xs text-slate-400">Visualização de prazos baseado nas datas de início e entrega de tarefas.</p>
+            <div class="flex flex-wrap items-center gap-2"><h3 class="text-sm font-bold uppercase tracking-wider text-slate-700">Cronograma do projeto</h3><span class="rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">@scheduledTasks.Count planejadas</span>@if(unplannedCount > 0){<span class="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">@unplannedCount sem data</span>}</div>
+            <p class="mt-1 text-xs text-slate-500">Arraste uma barra para reagendar. O progresso é calculado pelo status e pelas horas registradas.</p>
         </div>
-        <div class="flex bg-slate-100 p-1 rounded-lg" id="gantt-modes">
-            <button onclick="changeGanttMode('Day')" class="px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 transition-colors">Dia</button>
-            <button onclick="changeGanttMode('Week')" class="px-2.5 py-1 text-xs font-medium rounded-md bg-white text-slate-900 shadow-sm transition-colors">Semana</button>
-            <button onclick="changeGanttMode('Month')" class="px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 transition-colors">Mês</button>
+        <div class="flex flex-wrap items-center gap-2">
+            <button type="button" id="ganttToday" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:border-indigo-300">Hoje</button>
+            <div class="flex rounded-lg bg-slate-100 p-1" id="gantt-modes">
+                <button type="button" data-gantt-mode="Day" class="rounded-md px-2.5 py-1 text-xs font-medium text-slate-600">Dia</button>
+                <button type="button" data-gantt-mode="Week" class="rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-900 shadow-sm">Semana</button>
+                <button type="button" data-gantt-mode="Month" class="rounded-md px-2.5 py-1 text-xs font-medium text-slate-600">Mês</button>
+            </div>
         </div>
     </div>
 
-    <div class="w-full overflow-x-auto border border-slate-100 rounded-lg bg-slate-50/50 p-2 min-h-[300px]">
-        @if (Model.Tasks == null || !Model.Tasks.Any())
-        {
-            <div class="flex min-h-[250px] items-center justify-center text-sm text-slate-400 italic">
-                Nenhuma tarefa cadastrada para exibir no gráfico de Gantt.
-            </div>
-        }
-        else
-        {
-            <svg id="gantt-chart" class="w-full"></svg>
-        }
+    <div class="flex flex-wrap gap-4 border-b border-slate-100 px-5 py-3 text-[10px] font-medium text-slate-500"><span class="flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-full bg-indigo-500"></i>Normal</span><span class="flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-full bg-amber-500"></i>Alta</span><span class="flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-full bg-red-500"></i>Crítica/bloqueada</span><span class="flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-full bg-emerald-500"></i>Concluída</span></div>
+
+    <div id="ganttError" role="alert" class="m-5 hidden rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"></div>
+    <div id="ganttEmpty" class="@(scheduledTasks.Count > 0 ? "hidden" : "") m-5 flex min-h-64 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center"><div><p class="font-bold text-slate-600">Nenhuma tarefa planejada</p><p class="mt-1 text-sm text-slate-400">Adicione uma data de início ou prazo nas tarefas para montar o cronograma.</p></div></div>
+    <div id="gantt-scroll" class="@(scheduledTasks.Count == 0 ? "hidden" : "") min-h-[420px] w-full overflow-x-auto bg-slate-50/40 p-3">
+        <svg id="gantt-chart"></svg>
     </div>
 </div>
 
-@if (Model.Tasks != null && Model.Tasks.Any())
-{
-    <script>
-        (function () {
-            document.addEventListener('DOMContentLoaded', function () {
-                const tasks = [
-                    @foreach (var task in Model.Tasks)
-                    {
-                            var startStr = (task.StartDate ?? task.CreatedAt).ToString("yyyy-MM-dd");
-                            var endStr = (task.DueDate ?? (task.StartDate ?? task.CreatedAt).AddDays(1)).ToString("yyyy-MM-dd");
-                            var progress = task.Status == "done" ? 100 : (task.Status == "in-progress" ? 50 : 0);
+<script id="gantt-data" type="application/json">@Html.Raw(ganttJson)</script>
 
-                            <text>
-                            {
-                                id: '@task.Id',
-                                name: '@Html.Raw(System.Text.Encodings.Web.JavaScriptEncoder.Default.Encode(task.Title))',
-                                start: '@startStr',
-                                end: '@endStr',
-                                progress: @progress,
-                                custom_class: '@(task.Priority == "Urgente" ? "gantt-urgente" : (task.Priority == "Alta" ? "gantt-alta" : "gantt-normal"))'
-                            },
-                            </text>
-                    }
-                ];
-
-                if (tasks.length > 0 && document.getElementById('gantt-chart')) {
-                    window.ganttChartInstance = new Gantt("#gantt-chart", tasks, {
-                        header_height: 50,
-                        column_width: 30,
-                        step: 24,
-                        view_mode: 'Week',
-                        language: 'pt',
-                        custom_popup_html: function(task) {
-                            return `
-                                <div class="p-3 bg-white border border-slate-100 rounded-lg shadow-xl text-xs font-sans min-w-[160px]">
-                                    <div class="font-bold text-slate-900 mb-1">${task.name}</div>
-                                    <div class="text-slate-500 mb-1">Progresso: ${task.progress}%</div>
-                                    <div class="text-[10px] text-slate-400">Início: ${task.start}</div>
-                                    <div class="text-[10px] text-slate-400">Entrega: ${task.end}</div>
-                                </div>
-                            `;
-                        }
-                    });
-                }
-            });
-
-            window.changeGanttMode = function (mode) {
-                if (window.ganttChartInstance) {
-                    window.ganttChartInstance.change_view_mode(mode);
-
-                    const buttons = document.querySelectorAll('#gantt-modes button');
-                    buttons.forEach(btn => {
-                        btn.classList.remove('bg-white', 'text-slate-900', 'shadow-sm');
-                        btn.classList.add('text-slate-600');
-                    });
-
-                    const clickedBtn = Array.from(buttons).find(btn => btn.getAttribute('onclick').includes(mode));
-                    if (clickedBtn) {
-                        clickedBtn.classList.remove('text-slate-600');
-                        clickedBtn.classList.add('bg-white', 'text-slate-900', 'shadow-sm');
-                    }
-                }
-            };
-        })();
-    </script>
-
-    <style>
-        .gantt .bar-wrapper.gantt-urgente .bar {
-            fill: #ef4444;
-        }
-
-        .gantt .bar-wrapper.gantt-urgente .bar-progress {
-            fill: #dc2626;
-        }
-
-        .gantt .bar-wrapper.gantt-alta .bar {
-            fill: #f59e0b;
-        }
-
-        .gantt .bar-wrapper.gantt-alta .bar-progress {
-            fill: #d97706;
-        }
-
-        .gantt .bar-wrapper.gantt-normal .bar {
-            fill: #6366f1;
-        }
-
-        .gantt .bar-wrapper.gantt-normal .bar-progress {
-            fill: #4f46e5;
-        }
-    </style>
-}
+<style>
+    #gantt-scroll .gantt-container { min-width: 100%; }
+    #gantt-chart { min-height: 380px; }
+    .gantt .bar-wrapper.gantt-critical .bar, .gantt .bar-wrapper.gantt-blocked .bar { fill: #ef4444; }
+    .gantt .bar-wrapper.gantt-critical .bar-progress, .gantt .bar-wrapper.gantt-blocked .bar-progress { fill: #b91c1c; }
+    .gantt .bar-wrapper.gantt-high .bar { fill: #f59e0b; }
+    .gantt .bar-wrapper.gantt-high .bar-progress { fill: #d97706; }
+    .gantt .bar-wrapper.gantt-normal .bar { fill: #6366f1; }
+    .gantt .bar-wrapper.gantt-normal .bar-progress { fill: #4338ca; }
+    .gantt .bar-wrapper.gantt-done .bar { fill: #10b981; }
+    .gantt .bar-wrapper.gantt-done .bar-progress { fill: #047857; }
+    .gantt .handle.progress { display: none; }
+    .gantt .bar-label { fill: #fff; font-weight: 600; }
+</style>

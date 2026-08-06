@@ -1,53 +1,61 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Mvc;
+using PulseBoardMigration.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Lendo as chaves do appsettings.json
-var supabaseUrl = builder.Configuration["Supabase:Url"];
-var supabaseKey = builder.Configuration["Supabase:Key"];
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+builder.Logging.AddDebug();
 
-// 2. Criando o cliente do Supabase
-var supabaseOptions = new Supabase.SupabaseOptions { AutoConnectRealtime = true };
-var supabaseClient = new Supabase.Client(supabaseUrl, supabaseKey, supabaseOptions);
+var keyDirectory = new DirectoryInfo(
+    Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys"));
+builder.Services.AddDataProtection()
+    .SetApplicationName("PulseBoardMigration")
+    .PersistKeysToFileSystem(keyDirectory);
 
-// 3. Injetando no sistema (Singleton significa que cria uma vez e usa no projeto todo)
-builder.Services.AddSingleton(supabaseClient);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<SupabaseClientFactory>();
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<BoardService>();
+builder.Services.AddScoped<WorkspaceService>();
+builder.Services.AddScoped<ReportingService>();
+builder.Services.AddScoped<WorkManagementService>();
+builder.Services.AddScoped<BillingService>();
 
-// 4. Registando o nosso serviço
-builder.Services.AddScoped<PulseBoardMigration.Services.BoardService>();
-builder.Services.AddScoped<PulseBoardMigration.Services.AuthService>();
+builder.Services.AddControllersWithViews(options =>
+{
+    options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+});
 
-// Add services to the container.
-builder.Services.AddControllersWithViews();
-
-// Configura o sistema de autenticação por Cookie
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
-        options.LoginPath = "/Auth/Login"; // Se não estiver logado, manda pra cá
+        options.LoginPath = "/Auth/Login";
         options.LogoutPath = "/Auth/Logout";
+        options.AccessDeniedPath = "/Auth/AccessDenied";
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
     });
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
 app.UseRouting();
-
-app.UseAuthentication(); // 1º Verifica quem é o usuário
-app.UseAuthorization();  // 2º Verifica o que ele pode acessar
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}");
+    pattern: "{controller=Dashboard}/{action=Index}/{id?}");
 
 app.Run();

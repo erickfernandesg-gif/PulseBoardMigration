@@ -1,0 +1,11 @@
+@model PulseBoardMigration.Models.ExecutiveViewModel
+@{ ViewData["Title"] = "Painel executivo"; }
+<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h1 class="text-2xl font-bold">Painel executivo</h1><p class="text-sm text-slate-500">Capacidade, consumo e custo do portfólio.</p></div><form method="get" class="flex gap-2"><input type="month" name="fromMonth" value="@Model.FromMonth" class="field"/><input type="month" name="toMonth" value="@Model.ToMonth" class="field"/><button class="rounded-lg bg-slate-900 px-4 text-sm font-bold text-white">Filtrar</button></form></div>
+<div class="grid gap-4 md:grid-cols-3"><div class="rounded-2xl border bg-white p-5"><p class="text-xs font-bold uppercase text-slate-400">Planejado</p><p class="mt-2 text-3xl font-bold">@((Model.EstimatedMinutes/60m).ToString("0.0"))h</p></div><div class="rounded-2xl border bg-white p-5"><p class="text-xs font-bold uppercase text-slate-400">Realizado</p><p class="mt-2 text-3xl font-bold text-indigo-600">@((Model.LoggedMinutes/60m).ToString("0.0"))h</p></div><div class="rounded-2xl border bg-white p-5"><p class="text-xs font-bold uppercase text-slate-400">Custo realizado</p><p class="mt-2 text-3xl font-bold text-emerald-600">@Model.TotalCost.ToString("C")</p></div></div>
+@{
+    void MetricTable(string title, List<PulseBoardMigration.Models.ExecutiveMetric> items)
+    {
+        <section class="rounded-2xl border border-slate-200 bg-white p-6"><h2 class="mb-4 text-lg font-bold">@title</h2><div class="space-y-4">@foreach(var item in items.Take(10)){var max=Math.Max(item.EstimatedMinutes,item.LoggedMinutes); var pct=max==0?0:item.LoggedMinutes*100/max;<div data-searchable><div class="mb-1 flex justify-between text-sm"><strong>@item.Name</strong><span class="text-slate-500">@((item.LoggedMinutes/60m).ToString("0.#"))h · @item.Cost.ToString("C")</span></div><div class="h-2 overflow-hidden rounded-full bg-slate-100"><div class="h-full rounded-full bg-indigo-500" style="width:@Math.Min(100,pct)%"></div></div></div>}</div></section>
+    }
+}
+<div class="mt-6 grid gap-6 xl:grid-cols-3">@{MetricTable("Projetos",Model.Projects);MetricTable("Clientes",Model.Clients);MetricTable("Carga da equipe",Model.Workload);}</div>

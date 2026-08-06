@@ -1,48 +1,53 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.DataAnnotations;
+using Newtonsoft.Json;
 using Postgrest.Attributes;
 using Postgrest.Models;
-using Newtonsoft.Json; // Usado para mapear o JSON interno do Supabase
+using System.ComponentModel.DataAnnotations;
 
-namespace PulseBoardMigration.Models
+namespace PulseBoardMigration.Models;
+
+public class BoardColumnSetting
 {
-    // Classe auxiliar para ler o JSON de dentro da coluna "settings"
-    public class BoardColumnSetting
-    {
-        [JsonProperty("id")]
-        public string Id { get; set; }
+    [JsonProperty("id")]
+    public string Id { get; set; } = string.Empty;
 
-        [JsonProperty("title")]
-        public string Title { get; set; }
-    }
+    [JsonProperty("title")]
+    public string Title { get; set; } = string.Empty;
+}
 
-    [Table("boards")]
-    public class Board : BaseModel
-    {
-        [PrimaryKey("id", false)]
-        public Guid Id { get; set; }
+[Table("boards")]
+public class Board : BaseModel
+{
+    [PrimaryKey("id", false)]
+    public Guid Id { get; set; }
 
-        // MUDOU DE Title PARA Name
-        [Column("name")]
-        [Required(ErrorMessage = "O nome é obrigatório")]
-        public string Name { get; set; }
+    [Column("name")]
+    [Required(ErrorMessage = "O nome é obrigatório.")]
+    public string Name { get; set; } = string.Empty;
 
-        [Column("description")]
-        public string Description { get; set; }
+    [Column("description")]
+    public string? Description { get; set; }
 
-        [Column("owner_id")]
-        public Guid OwnerId { get; set; }
+    [Column("owner_id")]
+    public Guid OwnerId { get; set; }
 
-        [Column("created_at")]
-        public DateTime CreatedAt { get; set; }
+    [Column("status")]
+    public string Status { get; set; } = "active";
 
-        // Coluna nova identificada no JSON
-        [Column("status")]
-        public string Status { get; set; }
+    [Column("settings")]
+    public List<BoardColumnSetting> Settings { get; set; } = [];
 
-        // Mapeamento do JSONB das colunas do Kanban
-        [Column("settings")]
-        public List<BoardColumnSetting> Settings { get; set; }
-    }
+    [Column("planned_start")]
+    public DateTime? PlannedStart { get; set; }
+
+    [Column("planned_end")]
+    public DateTime? PlannedEnd { get; set; }
+
+    [Column("health")]
+    public string Health { get; set; } = "on_track";
+
+    [Column("budget_amount")]
+    public decimal? BudgetAmount { get; set; }
+
+    [Column("created_at")]
+    public DateTime CreatedAt { get; set; }
 }

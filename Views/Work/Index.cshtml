@@ -1,0 +1,42 @@
+@model PulseBoardMigration.Models.MyWorkViewModel
+@{ 
+    ViewData["Title"] = "Meu trabalho";
+    var today = DateTime.UtcNow.Date;
+    var pending = Model.Assignments.Where(x => x.ToUserId == Model.CurrentUserId && x.Status == "pending").ToList();
+    var review = Model.Tasks.Where(x => x.AssignedTo == Model.CurrentUserId && x.WorkflowState == "waiting_review").ToList();
+    var active = Model.Tasks.Where(x => x.AssignedTo == Model.CurrentUserId && x.WorkflowState is "inbox" or "in_progress" or "changes_requested" && x.Status != "done").ToList();
+    var waiting = Model.Tasks.Where(x => x.AssignedTo != Model.CurrentUserId && x.Status != "done" && (x.AccountableOwnerId == Model.CurrentUserId || Model.Followers.Any(f => f.TaskId == x.Id))).ToList();
+    var recentlyDone = Model.Tasks.Where(x => x.Status == "done" && x.CompletedAt >= today.AddDays(-14) && (x.AssignedTo == Model.CurrentUserId || x.AccountableOwnerId == Model.CurrentUserId || Model.Followers.Any(f => f.TaskId == x.Id))).ToList();
+}
+<div class="mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+    <div><h1 class="text-3xl font-bold">Meu trabalho</h1><p class="mt-1 text-sm text-slate-500">O que exige sua ação e o que você está acompanhando.</p></div>
+    <div class="flex gap-2 text-xs"><span class="rounded-full bg-indigo-100 px-3 py-1 font-bold text-indigo-700">@active.Count em ação</span><span class="rounded-full bg-amber-100 px-3 py-1 font-bold text-amber-700">@waiting.Count aguardando</span></div>
+</div>
+@if (pending.Any())
+{
+    <section class="mb-7 rounded-2xl border border-indigo-200 bg-indigo-50/50 p-5"><h2 class="mb-4 text-lg font-bold text-indigo-900">Caixa de entrada <span class="ml-1 text-sm text-indigo-500">@pending.Count</span></h2><div class="grid gap-4 lg:grid-cols-2">
+    @foreach (var assignment in pending)
+    {
+        var task = Model.Tasks.FirstOrDefault(x => x.Id == assignment.TaskId); if (task == null) continue;
+        <article class="rounded-xl border border-indigo-100 bg-white p-4 shadow-sm"><div class="flex items-start justify-between gap-3"><div><p class="text-[10px] font-bold uppercase text-indigo-500">@Model.Board(task.BoardId)?.Name · @assignment.Stage</p><h3 class="mt-1 font-bold">@task.Title</h3></div><span class="rounded bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">Nova</span></div>
+        @if (!string.IsNullOrWhiteSpace(assignment.Notes)){<p class="mt-3 text-sm text-slate-600">@assignment.Notes</p>}
+        @if (!string.IsNullOrWhiteSpace(assignment.AcceptanceCriteria)){<div class="mt-3 rounded-lg bg-slate-50 p-3 text-xs"><strong>Critérios:</strong> @assignment.AcceptanceCriteria</div>}
+        <div class="mt-4 flex flex-wrap gap-2"><form asp-action="Respond" method="post"><input type="hidden" name="assignmentId" value="@assignment.Id"/><input type="hidden" name="action" value="accept"/><button class="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white">Aceitar</button></form><form asp-action="Respond" method="post" class="flex gap-2"><input type="hidden" name="assignmentId" value="@assignment.Id"/><input type="hidden" name="action" value="reject"/><input name="note" required class="field !w-52 !py-2" placeholder="Motivo da recusa"/><button class="rounded-lg border border-red-200 px-3 py-2 text-xs font-bold text-red-600">Recusar</button></form><a href="/Boards/Details/@task.BoardId" class="rounded-lg px-3 py-2 text-xs font-bold text-slate-500">Abrir tarefa</a></div></article>
+    }
+    </div></section>
+}
+<div class="grid gap-7 xl:grid-cols-2">
+    <section class="rounded-2xl border border-slate-200 bg-white p-5"><h2 class="mb-4 text-lg font-bold">Estou executando <span class="text-sm text-slate-400">@active.Count</span></h2><div class="space-y-3">
+    @foreach (var task in active.OrderBy(x => x.DueDate ?? DateTime.MaxValue))
+    {
+        var assignment = Model.ActiveAssignment(task.Id);
+        <article class="rounded-xl border border-slate-100 p-4 @(task.IsBlocked ? "bg-red-50" : "bg-slate-50")"><div class="flex items-start justify-between gap-3"><div><p class="text-[10px] font-bold uppercase text-slate-400">@Model.Board(task.BoardId)?.Name · @task.Status</p><a href="/Boards/Details/@task.BoardId" class="font-bold hover:text-indigo-600">@task.Title</a></div><span class="text-xs font-bold @(task.DueDate < today ? "text-red-600" : "text-slate-500")">@(task.DueDate?.ToString("dd/MM") ?? "Sem prazo")</span></div><div class="mt-3 flex items-center gap-2">@if (task.IsBlocked){<span class="rounded bg-red-100 px-2 py-1 text-[10px] font-bold text-red-700">Bloqueada</span>}@if (task.WorkflowState == "changes_requested"){<span class="rounded bg-amber-100 px-2 py-1 text-[10px] font-bold text-amber-700">Ajustes solicitados</span>}@if (assignment?.Status == "accepted"){<form asp-action="Respond" method="post" class="ml-auto"><input type="hidden" name="assignmentId" value="@assignment.Id"/><input type="hidden" name="action" value="complete"/><button class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white">Concluir etapa</button></form>}</div></article>
+    }
+    @if (!active.Any()){<p class="py-8 text-center text-sm text-slate-400">Nenhuma ação em andamento.</p>}</div></section>
+    <section class="rounded-2xl border border-slate-200 bg-white p-5"><h2 class="mb-4 text-lg font-bold">Aguardando terceiros <span class="text-sm text-slate-400">@waiting.Count</span></h2><div class="space-y-3">@foreach (var task in waiting.OrderBy(x => x.DueDate ?? DateTime.MaxValue)){<a href="/Boards/Details/@task.BoardId" class="block rounded-xl border border-slate-100 bg-slate-50 p-4 hover:border-indigo-200"><div class="flex justify-between gap-3"><div><p class="text-[10px] font-bold uppercase text-slate-400">@Model.Board(task.BoardId)?.Name</p><strong>@task.Title</strong><p class="mt-1 text-xs text-slate-500">Com @(Model.Person(task.AssignedTo)?.FullName ?? "responsável não definido")</p></div><span class="text-xs text-slate-500">@(task.DueDate?.ToString("dd/MM") ?? "—")</span></div></a>}@if (!waiting.Any()){<p class="py-8 text-center text-sm text-slate-400">Nada aguardando outras pessoas.</p>}</div></section>
+</div>
+@if (review.Any())
+{
+    <section class="mt-7 rounded-2xl border border-emerald-200 bg-emerald-50/40 p-5"><h2 class="mb-4 text-lg font-bold text-emerald-900">Aguardando meu aceite</h2><div class="grid gap-3 lg:grid-cols-2">@foreach(var task in review){<article class="rounded-xl bg-white p-4"><strong>@task.Title</strong><p class="text-xs text-slate-500">@Model.Board(task.BoardId)?.Name</p><div class="mt-3 flex flex-wrap gap-2"><form asp-action="Review" method="post"><input type="hidden" name="taskId" value="@task.Id"/><input type="hidden" name="action" value="approve"/><button class="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white">Aprovar entrega</button></form><form asp-action="Review" method="post" class="flex gap-2"><input type="hidden" name="taskId" value="@task.Id"/><input type="hidden" name="action" value="changes"/><input name="note" required class="field !w-56 !py-2" placeholder="Ajustes necessários"/><button class="rounded-lg border border-amber-300 px-3 py-2 text-xs font-bold text-amber-700">Solicitar ajustes</button></form></div></article>}</div></section>
+}
+<details class="mt-7 rounded-2xl border border-slate-200 bg-white p-5"><summary class="cursor-pointer font-bold">Concluídas recentemente (@recentlyDone.Count)</summary><div class="mt-4 grid gap-2 md:grid-cols-2">@foreach(var task in recentlyDone){<a href="/Boards/Details/@task.BoardId" class="rounded-lg bg-slate-50 p-3 text-sm"><strong>@task.Title</strong><span class="ml-2 text-xs text-slate-400">@task.CompletedAt?.ToString("dd/MM")</span></a>}</div></details>

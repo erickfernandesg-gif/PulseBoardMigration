@@ -1,170 +1,64 @@
-﻿@model PulseBoardMigration.Models.BoardDetailsViewModel
-
-<div id="taskDetailsModal" class="fixed inset-0 z-50 hidden bg-slate-900/50 backdrop-blur-sm transition-opacity">
-    <div class="flex min-h-screen items-center justify-center p-4">
-        <div class="w-full max-w-2xl transform overflow-hidden rounded-2xl bg-white shadow-2xl transition-all flex flex-col max-h-[90vh]">
-
-            <form id="editTaskForm" asp-controller="Boards" asp-action="UpdateTaskDetails" method="post" class="flex flex-col h-full overflow-hidden">
-                <input type="hidden" name="boardId" value="@Model.Board.Id" />
-                <input type="hidden" id="EditTaskId" name="taskId" />
-
-                <div class="flex items-center justify-between border-b border-slate-100 p-6 shrink-0">
-                    <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
-                        <i data-lucide="edit-2" class="h-5 w-5 text-indigo-500"></i>
-                        Detalhes da Tarefa
-                    </h3>
-                    <div class="flex items-center gap-2">
-                        <button type="button" onclick="confirmDeleteTask()" class="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Excluir Tarefa">
-                            <i data-lucide="trash-2" class="h-5 w-5"></i>
-                        </button>
-                        <button type="button" onclick="closeTaskDetailsModal()" class="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
-                            <i data-lucide="x" class="h-5 w-5"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="p-6 space-y-5 overflow-y-auto flex-1">
-                    <div>
-                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Título</label>
-                        <input type="text" id="EditTitle" name="title" required class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
-                    </div>
-
-                    <div>
-                        <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Descrição</label>
-                        <textarea id="EditDescription" name="description" rows="4" class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all resize-none"></textarea>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-6">
-                        <div>
-                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Status / Coluna</label>
-                            <select id="EditColumnId" name="columnId" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all">
-                                @if (Model.Columns != null)
-                                {
-                                    foreach (var col in Model.Columns)
-                                    {
-                                        <option value="@col.Id">@col.Title</option>
-                                    }
-                                }
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Responsável</label>
-                            <div class="relative">
-                                <i data-lucide="user-plus" class="absolute left-3 top-2.5 h-4 w-4 text-slate-400"></i>
-                                <select id="EditAssigneeId" name="assigneeId" class="w-full rounded-xl border border-slate-200 pl-9 pr-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all">
-                                    <option value="">Não atribuído</option>
-                                    @if (ViewData["Users"] != null)
-                                    {
-                                        foreach (var user in (IEnumerable<User>)ViewData["Users"])
-                                        {
-                                            <option value="@user.Id">@user.Name</option>
-                                        }
-                                    }
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-6">
-                        <div>
-                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Prioridade</label>
-                            <select id="EditPriority" name="priority" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all">
-                                <option value="Baixa">Baixa</option>
-                                <option value="Média">Média</option>
-                                <option value="Alta">Alta</option>
-                                <option value="Urgente">Urgente</option>
-                            </select>
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-2">
-                        <div>
-                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Início</label>
-                                <input type="date" id="EditStartDate" name="startDate" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Entrega</label>
-                                <input type="date" id="EditDueDate" name="dueDate" class="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-6">
-                        <div>
-                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-                                <i data-lucide="building-2" class="h-3.5 w-3.5"></i> Departamento
-                            </label>
-                            <select id="EditDepartment" name="department" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all">
-                                <option value="">Geral</option>
-                                <option value="TI">Tecnologia (TI)</option>
-                                <option value="Marketing">Marketing</option>
-                                <option value="Financeiro">Financeiro</option>
-                                <option value="Comercial">Vendas / Comercial</option>
-                                <option value="RH">Recursos Humanos</option>
-                                <option value="Operacoes">Operações</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-                                <i data-lucide="alert-octagon" class="h-3.5 w-3.5 text-red-400"></i> Risco / Bloqueio
-                            </label>
-                            <select id="EditRiskLevel" name="riskLevel" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all">
-                                <option value="Nenhum">Nenhum Risco</option>
-                                <option value="Baixo">Risco Baixo</option>
-                                <option value="Medio">Risco Médio</option>
-                                <option value="Alto">Risco Alto</option>
-                                <option value="Critico">Crítico / Bloqueado</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-6">
-                        <div>
-                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-                                <i data-lucide="zap" class="h-3.5 w-3.5 text-yellow-500"></i> Esforço (Pontos/Horas)
-                            </label>
-                            <input type="number" id="EditStoryPoints" name="storyPoints" min="0" placeholder="Ex: 5" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
-                                <i data-lucide="tags" class="h-3.5 w-3.5"></i> Etiquetas
-                            </label>
-                            <input type="text" id="EditTags" name="tags" placeholder="Ex: bug, frontend, urgente" class="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
-                        </div>
-                    </div>
-
-                    <div class="mt-8 border-t border-slate-100 pt-6">
-                        <div class="flex items-center gap-2 mb-4 text-slate-700">
-                            <i data-lucide="message-square" class="h-5 w-5"></i>
-                            <h4 class="font-bold">Comentários e Atividades</h4>
-                        </div>
-
-                        <div id="taskCommentsList" class="space-y-3 mb-4 max-h-32 overflow-y-auto">
-                            <p class="text-sm text-slate-500 italic text-center py-2" id="noCommentsMsg">Nenhum comentário ou atividade registada.</p>
-                        </div>
-
-                        <div class="flex gap-2 mt-2">
-                            <input type="text" id="newCommentInput" placeholder="Adicionar um comentário..." class="flex-1 rounded-xl border border-slate-200 px-4 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" />
-                            <button type="button" onclick="submitTaskComment()" class="rounded-xl bg-slate-100 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-200 transition-all">Enviar</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-slate-50 px-6 py-4 flex justify-end gap-3 shrink-0 rounded-b-2xl border-t border-slate-200">
-                    <button type="button" onclick="closeTaskDetailsModal()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors">Cancelar</button>
-                    <button type="submit" class="rounded-xl bg-indigo-600 px-6 py-2 text-sm font-bold text-white hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all flex items-center gap-2">
-                        <i data-lucide="save" class="h-4 w-4"></i>
-                        Salvar Alterações
-                    </button>
-                </div>
+@model PulseBoardMigration.Models.BoardDetailsViewModel
+<div id="taskDetailsModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+    <div class="max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-center justify-between border-b border-slate-100 p-6">
+            <div><h2 class="text-xl font-bold">Detalhes da demanda</h2><p class="text-sm text-slate-500">Edite planejamento, colaboração e execução.</p></div>
+            <button type="button" onclick="closeTaskDetailsModal()" class="rounded-lg p-2 hover:bg-slate-100">✕</button>
+        </div>
+        <form id="editTaskForm" asp-controller="Boards" asp-action="UpdateTask" method="post" class="grid gap-5 p-6 md:grid-cols-3">
+            <input type="hidden" id="EditTaskId" name="taskId" />
+            <input type="hidden" name="boardId" value="@Model.Board.Id" />
+            <div class="md:col-span-2"><label class="label">Título</label><input id="EditTitle" name="title" required maxlength="200" class="field" /></div>
+            <div><label class="label">Etapa</label><select id="EditColumnId" name="columnId" class="field">@foreach(var c in Model.Columns){<option value="@c.Id">@c.Title</option>}</select></div>
+            <div class="md:col-span-2"><label class="label">Descrição</label><textarea id="EditDescription" name="description" rows="3" maxlength="5000" class="field"></textarea></div>
+            <div><label class="label">Prioridade</label><select id="EditPriority" name="priority" class="field"><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option><option value="critical">Crítica</option></select></div>
+            <div><label class="label">Responsável</label><select id="EditAssignedTo" name="assignedTo" class="field"><option value="">Sem responsável</option>@foreach(var p in Model.Profiles){<option value="@p.Id">@(p.FullName ?? p.Email)</option>}</select></div>
+            <div><label class="label">Cliente</label><select id="EditClientId" name="clientId" class="field"><option value="">Operação interna</option>@foreach(var c in Model.Clients){<option value="@c.Id">@c.Name</option>}</select></div>
+            <div><label class="label">Ciclo</label><input id="EditTargetMonth" type="month" name="targetMonth" class="field" /></div>
+            <div><label class="label">Início</label><input id="EditStartDate" type="date" name="startDate" class="field" /></div>
+            <div><label class="label">Prazo</label><input id="EditDueDate" type="date" name="dueDate" class="field" /></div>
+            <div><label class="label">Estimativa</label><div class="grid grid-cols-2 gap-2"><input id="EditEstimatedHours" type="number" min="0" max="100000" name="estimatedHours" class="field" placeholder="Horas" /><input id="EditEstimatedMinutes" type="number" min="0" max="59" name="estimatedMinutes" class="field" placeholder="Min" /></div></div>
+            <div class="md:col-span-2"><label class="label">Colaboradores</label><div class="grid max-h-28 grid-cols-2 gap-2 overflow-y-auto rounded-lg border border-slate-200 p-3">@foreach(var p in Model.Profiles){<label class="flex items-center gap-2 text-xs"><input class="edit-collaborator" type="checkbox" name="collaboratorIds" value="@p.Id" /> @(p.FullName ?? p.Email)</label>}</div></div>
+            <div class="rounded-lg border border-red-100 bg-red-50 p-3"><label class="flex items-center gap-2 text-sm font-bold text-red-700"><input id="EditIsBlocked" type="checkbox" name="isBlocked" value="true" /> Bloqueada</label><input id="EditBlockerReason" name="blockerReason" maxlength="500" class="field mt-2" placeholder="Motivo do bloqueio" /></div>
+            <div id="editTaskError" role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 md:col-span-3"></div>
+            <div class="flex justify-between border-t border-slate-100 pt-5 md:col-span-3">
+                <button type="button" onclick="confirmDeleteTask()" class="rounded-lg px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50">Excluir</button>
+                <button type="submit" class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white">Salvar alterações</button>
+            </div>
+        </form>
+        <div class="border-t border-slate-100 p-6">
+            <div id="taskExtraContent"></div>
+            <form id="commentForm" asp-controller="Boards" asp-action="AddComment" method="post" enctype="multipart/form-data" class="mt-6 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                <input class="task-id-target" type="hidden" name="taskId" />
+                <label class="label">Escrever na conversa</label>
+                <textarea name="content" rows="3" maxlength="5000" class="field" placeholder="Mensagem, orientação ou dúvida..."></textarea>
+                <div id="chatImagePreview" class="mt-3 hidden grid-cols-2 gap-2 sm:grid-cols-4"></div>
+                <div class="mt-3 flex flex-wrap items-center justify-between gap-3"><label class="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:border-indigo-300"><input id="ChatImages" type="file" name="images" accept="image/jpeg,image/png,image/webp,image/gif" multiple class="hidden"/>📷 Anexar imagens</label><div class="flex items-center gap-3"><span class="text-[10px] text-slate-400">Até 4 imagens · 8 MB cada</span><button class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white">Enviar mensagem</button></div></div>
             </form>
-
-            <form id="deleteTaskForm" asp-controller="Boards" asp-action="DeleteTask" method="post" class="hidden">
-                <input type="hidden" name="boardId" value="@Model.Board.Id" />
-                <input type="hidden" id="DeleteTaskId" name="taskId" />
+            <div class="mt-6 grid gap-3 md:grid-cols-2">
+                <form id="checklistForm" asp-controller="Boards" asp-action="AddChecklistItem" method="post" class="flex gap-2"><input class="task-id-target" type="hidden" name="taskId" /><input name="title" required class="field" placeholder="Novo item" /><input type="hidden" name="position" value="999" /><button class="rounded-lg bg-slate-900 px-3 text-white">+</button></form>
+                <form id="timeLogForm" asp-controller="Boards" asp-action="AddTimeLog" method="post" class="grid grid-cols-4 gap-2"><input class="task-id-target" type="hidden" name="taskId" /><input type="number" min="0" name="hours" class="field" placeholder="h" /><input type="number" min="0" max="59" name="minutes" class="field" placeholder="m" /><input type="date" name="logDate" class="field col-span-2" /><input name="description" class="field col-span-3" placeholder="Descrição" /><button class="rounded-lg bg-slate-900 text-white">+</button><label class="col-span-4 flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" name="isBillable" value="true" checked /><input type="hidden" name="isBillable" value="false" /> Hora faturável</label></form>
+            </div>
+        </div>
+        <div class="border-t border-slate-100 p-6">
+            <div class="mb-6 rounded-xl border border-sky-100 bg-sky-50 p-4"><h3 class="text-sm font-bold text-sky-900">Pré-requisitos da atividade</h3><p class="mb-3 mt-1 text-xs text-sky-700"><strong>Exemplo:</strong> “Publicar em produção” depende de “Concluir os testes”. Enquanto o teste estiver pendente, o sistema impede o aceite da publicação.</p><form id="dependencyForm" asp-controller="Work" asp-action="AddDependency" method="post" class="flex gap-2"><input class="task-id-target" type="hidden" name="taskId"/><select name="dependsOnTaskId" required class="field"><option value="">Esta atividade depende de...</option>@foreach(var candidate in Model.Tasks){<option class="dependency-task-option" value="@candidate.Id">@candidate.Title</option>}</select><button class="rounded-lg bg-sky-700 px-4 text-sm font-bold text-white">Adicionar</button></form></div>
+            <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4"><h3 class="font-bold text-amber-900">Tenho uma dúvida — devolver a ação</h3><p class="mb-3 mt-1 text-xs text-amber-700">A dúvida entra na conversa, a outra pessoa recebe um alerta e a atividade volta para a caixa de entrada dela. Você continua acompanhando.</p><form id="returnQuestionForm" asp-controller="Work" asp-action="ReturnWithQuestion" method="post" class="grid gap-3 md:grid-cols-[220px_1fr_auto]"><input class="task-id-target" type="hidden" name="taskId"/><select name="toUserId" required class="field"><option value="">Quem deve responder?</option>@foreach(var p in Model.Profiles){<option value="@p.Id">@(p.FullName ?? p.Email)</option>}</select><textarea name="question" required maxlength="5000" rows="2" class="field" placeholder="Descreva sua dúvida com contexto..."></textarea><button class="rounded-lg bg-amber-600 px-4 text-sm font-bold text-white">Devolver com dúvida</button></form></div>
+            <h3 class="mb-1 text-lg font-bold">Enviar para a próxima etapa</h3>
+            <p class="mb-4 text-sm text-slate-500">Transfere a ação, mantém os envolvidos acompanhando e registra o aceite.</p>
+            <form id="handoffTaskForm" asp-controller="Work" asp-action="Handoff" method="post" class="grid gap-3 md:grid-cols-4">
+                <input class="task-id-target" type="hidden" name="taskId" />
+                <div><label class="label">Próxima etapa</label><select name="stage" required class="field">@foreach(var c in Model.Columns){<option value="@c.Id">@c.Title</option>}</select></div>
+                <div><label class="label">Novo executor</label><select name="toUserId" required class="field"><option value="">Selecione</option>@foreach(var p in Model.Profiles){<option value="@p.Id">@(p.FullName ?? p.Email)</option>}</select></div>
+                <div><label class="label">Prazo da etapa</label><input type="date" name="handoffDueDate" class="field" /></div>
+                <div><label class="label">Estimativa</label><div class="grid grid-cols-2 gap-2"><input type="number" min="0" name="estimatedHours" class="field" placeholder="h"/><input type="number" min="0" max="59" name="estimatedMinutes" class="field" placeholder="min"/></div></div>
+                <div class="md:col-span-2"><label class="label">Instruções</label><textarea name="notes" rows="2" class="field"></textarea></div>
+                <div class="md:col-span-2"><label class="label">Critérios de aceite</label><textarea name="acceptanceCriteria" rows="2" class="field"></textarea></div>
+                <label class="flex items-center gap-2 text-sm"><input id="HandoffRequiresAcceptance" type="checkbox" name="requiresAcceptance" value="true" /> Exigir aprovação</label>
+                <select id="HandoffAcceptanceBy" name="acceptanceBy" class="field"><option value="">Responsável principal</option>@foreach(var p in Model.Profiles){<option value="@p.Id">@(p.FullName ?? p.Email)</option>}</select>
+                <div id="handoffTaskError" role="alert" class="hidden rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 md:col-span-4"></div>
+                <div class="md:col-span-4 flex justify-end"><button type="submit" class="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-bold text-white">Transferir ação</button></div>
             </form>
         </div>
+        <form id="deleteTaskForm" asp-controller="Boards" asp-action="DeleteTask" method="post" class="hidden"><input id="DeleteTaskId" name="taskId" /></form>
     </div>
 </div>

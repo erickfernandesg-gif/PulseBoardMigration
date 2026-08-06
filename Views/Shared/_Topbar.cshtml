@@ -1,61 +1,73 @@
-﻿@{
-    var initial = User.Identity?.Name?.FirstOrDefault().ToString().ToUpper() ?? "U";
+@{
+    var initial = User.Identity?.Name?.FirstOrDefault().ToString().ToUpperInvariant() ?? "U";
 }
-
-<header class="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/80 px-4 backdrop-blur-md md:px-6">
-
-    <div class="flex items-center gap-4">
-        <button id="openMobileMenuBtn" class="flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 md:hidden">
-            <i data-lucide="menu" class="h-6 w-6"></i>
-        </button>
-        <div class="hidden items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 md:flex border border-slate-100">
-            <i data-lucide="search" class="h-4 w-4 text-slate-400"></i>
-            <input type="text" placeholder="Buscar..." class="bg-transparent text-sm outline-none placeholder:text-slate-400 w-64" disabled />
-        </div>
+<header class="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur md:px-6">
+    <button id="openMobileMenuBtn" class="rounded-lg p-2 text-slate-500 md:hidden"><i data-lucide="menu"></i></button>
+    <div class="hidden items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 md:flex">
+        <i data-lucide="search" class="h-4 w-4 text-slate-400"></i>
+        <input id="globalSearch" placeholder="Buscar nesta página..." class="w-64 bg-transparent text-sm outline-none" />
     </div>
-
     <div class="flex items-center gap-3">
-        <button class="relative flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 transition-colors">
-            <i data-lucide="bell" class="h-5 w-5"></i>
-        </button>
-
         <div class="relative">
-            <button id="profileDropdownBtn" class="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 p-1 pr-3 hover:bg-slate-100 transition-colors">
-                <div class="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-xs shadow-sm">
-                    @initial
-                </div>
-                <i data-lucide="chevron-down" class="h-4 w-4 text-slate-500"></i>
+            <button id="notificationButton" type="button" class="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100">
+                <i data-lucide="bell" class="h-5 w-5"></i>
+                <span id="notificationDot" class="absolute right-1 top-1 hidden h-2 w-2 rounded-full bg-red-500"></span>
             </button>
-
-            <div id="profileDropdownMenu" class="absolute right-0 mt-2 w-56 hidden rounded-xl border border-slate-100 bg-white p-2 shadow-lg ring-1 ring-black/5 focus:outline-none">
-                <div class="px-3 py-2 mb-2 border-b border-slate-100">
-                    <p class="text-sm font-medium text-slate-900 truncate">@User.Identity?.Name</p>
-                </div>
-                <a href="/Settings" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors">
-                    <i data-lucide="settings" class="h-4 w-4"></i> Configurações
-                </a>
-                <a href="/Auth/Logout" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 mt-1 text-sm text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors">
-                    <i data-lucide="log-out" class="h-4 w-4"></i> Sair
-                </a>
+            <div id="notificationMenu" class="absolute right-0 z-50 mt-2 hidden w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
+                <div class="border-b border-slate-100 px-4 py-3 text-sm font-bold">Atividade recente</div>
+                <div id="notificationList" class="max-h-80 overflow-y-auto p-2"><p class="p-3 text-sm text-slate-400">Carregando...</p></div>
             </div>
         </div>
+        <a href="/Settings" class="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">@initial</a>
+        <form asp-controller="Auth" asp-action="Logout" method="post">
+            <button type="submit" title="Sair" class="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600"><i data-lucide="log-out" class="h-5 w-5"></i></button>
+        </form>
     </div>
 </header>
-
 <script>
-    // Lógica do Dropdown de perfil (Substitui o useState)
-    const profileBtn = document.getElementById('profileDropdownBtn');
-    const profileMenu = document.getElementById('profileDropdownMenu');
-
-    profileBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        profileMenu.classList.toggle('hidden');
-    });
-
-    // Fecha ao clicar fora
-    document.addEventListener('click', (e) => {
-        if (!profileMenu.contains(e.target) && !profileBtn.contains(e.target)) {
-            profileMenu.classList.add('hidden');
+document.getElementById('globalSearch')?.addEventListener('input', event => {
+    const term = event.target.value.toLowerCase();
+    document.querySelectorAll('[data-searchable]').forEach(item => item.classList.toggle('hidden', !item.textContent.toLowerCase().includes(term)));
+});
+(() => {
+    const button = document.getElementById('notificationButton');
+    const menu = document.getElementById('notificationMenu');
+    const list = document.getElementById('notificationList');
+    let loaded = false;
+    const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    const loadNotifications = async () => {
+        const response = await fetch('/Notifications/List');
+        if (!response.ok) return;
+        const payload = await response.json();
+        document.getElementById('notificationDot')?.classList.toggle('hidden', payload.unreadCount === 0);
+        if (!loaded) {
+            list.innerHTML = payload.items.length ? payload.items.map(item => `
+                <a href="${escapeHtml(item.actionUrl || (item.boardId ? `/Boards/Details/${item.boardId}` : '/Work'))}" class="block rounded-lg p-3 text-sm ${item.readAt ? '' : 'bg-indigo-50'} hover:bg-slate-50">
+                    <strong class="block text-slate-700">${escapeHtml(item.title)}</strong>
+                    <span class="block text-xs text-slate-500">${escapeHtml(item.message || '')}</span>
+                    <span class="text-[10px] text-slate-400">${new Date(item.createdAt).toLocaleString('pt-BR')}</span>
+                </a>`).join('') : '<p class="p-3 text-sm text-slate-400">Nenhuma notificação.</p>';
         }
+    };
+    loadNotifications().catch(() => {});
+    window.setInterval(() => loadNotifications().catch(() => {}), 30000);
+    button?.addEventListener('click', async event => {
+        event.stopPropagation();
+        menu.classList.toggle('hidden');
+        if (loaded || menu.classList.contains('hidden')) return;
+        try {
+            await loadNotifications();
+            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+            await fetch('/Notifications/MarkRead', {
+                method: 'POST',
+                headers: {'Content-Type':'application/x-www-form-urlencoded'},
+                body: new URLSearchParams({__RequestVerificationToken: token})
+            });
+            loaded = true;
+            document.getElementById('notificationDot')?.classList.add('hidden');
+        } catch { list.innerHTML = '<p class="p-3 text-sm text-red-500">Falha ao carregar.</p>'; }
     });
+    document.addEventListener('click', () => menu?.classList.add('hidden'));
+    menu?.addEventListener('click', event => event.stopPropagation());
+})();
 </script>

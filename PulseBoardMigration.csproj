@@ -4,6 +4,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>PulseBoardMigration-2e23e986-f52c-4ae3-952e-5236dd83454c</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

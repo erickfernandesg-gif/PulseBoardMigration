@@ -1,29 +1,23 @@
-﻿using Supabase;
-using System.Threading.Tasks;
+namespace PulseBoardMigration.Services;
 
-namespace PulseBoardMigration.Services
+public class AuthService
 {
-    public class AuthService
+    private readonly SupabaseClientFactory _clientFactory;
+
+    public AuthService(SupabaseClientFactory clientFactory)
     {
-        private readonly Client _supabase;
+        _clientFactory = clientFactory;
+    }
 
-        public AuthService(Client supabase)
-        {
-            _supabase = supabase;
-        }
+    public async Task<Supabase.Gotrue.Session?> LoginAsync(string email, string password)
+    {
+        var client = _clientFactory.CreateAnonymousClient();
+        return await client.Auth.SignIn(email, password);
+    }
 
-        // Método para fazer o Login
-        public async Task<Supabase.Gotrue.Session> LoginAsync(string email, string password)
-        {
-            // O Supabase verifica as credenciais e devolve uma sessão (com o Token)
-            var session = await _supabase.Auth.SignIn(email, password);
-            return session;
-        }
-
-        // Método para fazer Logout
-        public async Task LogoutAsync()
-        {
-            await _supabase.Auth.SignOut();
-        }
+    public async Task LogoutAsync()
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        await client.Auth.SignOut();
     }
 }
