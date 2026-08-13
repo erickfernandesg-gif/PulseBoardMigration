@@ -31,7 +31,7 @@ public class WorkspaceService
         {
             CurrentUserId = currentUserId,
             Boards = boards.Models.OrderByDescending(b => b.CreatedAt).ToList(),
-            Tasks = tasks.Models.ToList(),
+            Tasks = tasks.Models.Where(x => x.ArchivedAt == null).ToList(),
             RecentComments = comments.Models.OrderByDescending(c => c.CreatedAt).Take(10).ToList(),
             Profiles = profiles.Models.ToList()
         };
@@ -114,6 +114,7 @@ public class WorkspaceService
             .Set(a => a.ActionType, rule.ActionType)
             .Set(a => a.ActionPayload!, rule.ActionPayload)
             .Set(a => a.IsActive, rule.IsActive)
+            .Set(a => a.BoardId, rule.BoardId)
             .Update();
         return updated.Models.FirstOrDefault();
     }
@@ -258,22 +259,43 @@ public class WorkspaceService
         return id;
     }
 
-    public async Task DeleteEmployeeAsync(Guid userId)
+    public async Task DeactivateEmployeeAsync(Guid userId, Guid deactivatedBy)
     {
         var service = _clientFactory.CreateServiceClient();
-        await service.From<PulseTask>()
-            .Where(t => t.AssignedTo == userId)
-            .Set(t => t.AssignedTo, null)
+        await service.From<Profile>()
+            .Where(profile => profile.Id == userId)
+            .Set(profile => profile.IsActive, false)
+            .Set(profile => profile.DeactivatedAt, DateTime.UtcNow)
+            .Set(profile => profile.DeactivatedBy, deactivatedBy)
             .Update();
-        await service.From<TaskCollaborator>().Where(c => c.UserId == userId).Delete();
-        await service.From<UserRate>().Where(r => r.UserId == userId).Delete();
-        await service.From<TaskComment>().Where(c => c.UserId == userId).Delete();
-        await service.From<TimeLog>().Where(l => l.UserId == userId).Delete();
 
         var url = RequiredSetting("Supabase:Url");
         var serviceKey = ServiceRoleSetting();
         using var http = CreateAdminHttpClient(serviceKey);
-        var response = await http.DeleteAsync($"{url.TrimEnd('/')}/auth/v1/admin/users/{userId}");
+        var response = await http.PutAsJsonAsync($"{url.TrimEnd('/')}/auth/v1/admin/users/{userId}", new
+        {
+            ban_duration = "876000h"
+        });
+        response.EnsureSuccessStatusCode();
+    }
+
+    public async Task ReactivateEmployeeAsync(Guid userId)
+    {
+        var service = _clientFactory.CreateServiceClient();
+        await service.From<Profile>()
+            .Where(profile => profile.Id == userId)
+            .Set(profile => profile.IsActive, true)
+            .Set(profile => profile.DeactivatedAt, null)
+            .Set(profile => profile.DeactivatedBy, null)
+            .Update();
+
+        var url = RequiredSetting("Supabase:Url");
+        var serviceKey = ServiceRoleSetting();
+        using var http = CreateAdminHttpClient(serviceKey);
+        var response = await http.PutAsJsonAsync($"{url.TrimEnd('/')}/auth/v1/admin/users/{userId}", new
+        {
+            ban_duration = "none"
+        });
         response.EnsureSuccessStatusCode();
     }
 

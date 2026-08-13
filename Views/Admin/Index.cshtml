@@ -26,7 +26,7 @@
                     <select name="role" class="field"><option value="user" selected="@(profile.Role == "user")">Colaborador</option><option value="manager" selected="@(profile.Role == "manager")">Gestor</option><option value="admin" selected="@(profile.Role == "admin")">Admin</option></select>
                     <select name="teamId" class="field"><option value="">Sem equipe</option>@foreach(var team in Model.Teams){<option value="@team.Id" selected="@(profile.TeamId == team.Id)">@team.Name</option>}</select>
                     <input type="number" step="0.01" min="0" name="hourlyRate" value="@rate.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)" class="field" />
-                    <div class="flex gap-1"><button class="flex-1 rounded-lg bg-indigo-600 px-2 text-xs font-bold text-white">Salvar</button><button type="submit" formaction="/Admin/DeleteUser" onclick="return confirm('Remover definitivamente este usuário?')" class="rounded-lg px-2 text-red-600">×</button></div>
+                    <div class="flex gap-1"><button class="flex-1 rounded-lg bg-indigo-600 px-2 text-xs font-bold text-white">Salvar</button>@if(profile.IsActive){<button type="submit" formaction="/Admin/DeleteUser" onclick="return confirm('Desativar este usuário? O histórico será preservado.')" class="rounded-lg px-2 text-red-600">Desativar</button>}else{<button type="submit" formaction="/Admin/ReactivateUser" class="rounded-lg px-2 text-emerald-600">Reativar</button>}</div>
                 </form>
             }
         </div>

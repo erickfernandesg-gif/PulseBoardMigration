@@ -2,11 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PulseBoardMigration.Models;
 using PulseBoardMigration.Services;
+using PulseBoardMigration.Security;
 using System.Security.Claims;
 
 namespace PulseBoardMigration.Controllers;
 
-[Authorize]
+[Authorize(Policy = PulsePolicies.ManagerOrAdmin)]
 public class AdminController : Controller
 {
     private readonly WorkspaceService _workspaceService;
@@ -95,12 +96,30 @@ public class AdminController : Controller
     {
         try
         {
-            await _workspaceService.DeleteEmployeeAsync(id);
+            if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var actorId)) return Unauthorized();
+            if (id == actorId) throw new InvalidOperationException("Você não pode desativar o próprio usuário.");
+            await _workspaceService.DeactivateEmployeeAsync(id, actorId);
             TempData["Success"] = "Usuário removido.";
         }
         catch (Exception ex)
         {
             TempData["Error"] = $"Não foi possível remover o usuário: {ex.Message}";
+        }
+
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ReactivateUser(Guid id)
+    {
+        try
+        {
+            await _workspaceService.ReactivateEmployeeAsync(id);
+            TempData["Success"] = "Usuário reativado.";
+        }
+        catch (Exception ex)
+        {
+            TempData["Error"] = $"Não foi possível reativar o usuário: {ex.Message}";
         }
 
         return RedirectToAction(nameof(Index));

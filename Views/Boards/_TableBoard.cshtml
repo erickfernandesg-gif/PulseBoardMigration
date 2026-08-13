@@ -20,11 +20,13 @@
                         <td class="px-5 py-4">@(task.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
                         <td class="px-5 py-4 text-right">
                             <button type="button" class="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold"
-                                    data-task-id="@task.Id" data-title="@task.Title" data-description="@task.Description"
+                                    data-task-id="@task.Id" data-row-version="@task.RowVersion" data-title="@task.Title" data-description="@task.Description"
                                     data-status="@task.Status" data-priority="@task.Priority" data-assigned-to="@task.AssignedTo"
                                     data-client-id="@task.ClientId" data-start-date="@(task.StartDate?.ToString("yyyy-MM-dd"))"
                                     data-due-date="@(task.DueDate?.ToString("yyyy-MM-dd"))" data-target-month="@task.TargetMonth"
-                                    data-estimated-minutes="@task.EstimatedMinutes" data-is-blocked="@task.IsBlocked.ToString().ToLowerInvariant()"
+                                    data-estimated-minutes="@task.EstimatedMinutes" data-sla-minutes="@task.SlaMinutes"
+                                    data-planned-value="@task.PlannedValue" data-custom-fields="@System.Text.Json.JsonSerializer.Serialize(task.CustomFields)"
+                                    data-is-blocked="@task.IsBlocked.ToString().ToLowerInvariant()"
                                     data-blocker-reason="@task.BlockerReason" data-collaborators="@string.Join(",", collaboratorIds)"
                                     onclick="openTaskDetailsModal(this)">Editar</button>
                         </td>

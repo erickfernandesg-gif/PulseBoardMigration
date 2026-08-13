@@ -24,6 +24,15 @@ public class Profile : BaseModel
     [Column("team_id")]
     public Guid? TeamId { get; set; }
 
+    [Column("is_active")]
+    public bool IsActive { get; set; } = true;
+
+    [Column("deactivated_at")]
+    public DateTime? DeactivatedAt { get; set; }
+
+    [Column("deactivated_by")]
+    public Guid? DeactivatedBy { get; set; }
+
     [Column("last_read_notifications_at")]
     public DateTime? LastReadNotificationsAt { get; set; }
 
@@ -266,4 +275,10 @@ public class AutomationRule : BaseModel
 
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }
+
+    [Column("board_id")]
+    public Guid? BoardId { get; set; }
+
+    [Column("condition_field")]
+    public string? ConditionField { get; set; }
 }

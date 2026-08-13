@@ -2,11 +2,12 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PulseBoardMigration.Models;
 using PulseBoardMigration.Services;
+using PulseBoardMigration.Security;
 using System.Security.Claims;
 
 namespace PulseBoardMigration.Controllers;
 
-[Authorize]
+[Authorize(Policy = PulsePolicies.FinanceAccess)]
 public class BillingController : Controller
 {
     private readonly BillingService _service;

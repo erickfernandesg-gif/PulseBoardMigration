@@ -3,9 +3,10 @@
 }
 <header class="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 bg-white/90 px-4 backdrop-blur md:px-6">
     <button id="openMobileMenuBtn" class="rounded-lg p-2 text-slate-500 md:hidden"><i data-lucide="menu"></i></button>
-    <div class="hidden items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 md:flex">
+    <div class="relative hidden items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 md:flex">
         <i data-lucide="search" class="h-4 w-4 text-slate-400"></i>
-        <input id="globalSearch" placeholder="Buscar nesta página..." class="w-64 bg-transparent text-sm outline-none" />
+        <input id="globalSearch" autocomplete="off" placeholder="Buscar tarefas, conversas e arquivos..." class="w-72 bg-transparent text-sm outline-none" />
+        <div id="globalSearchResults" class="absolute left-0 top-12 z-50 hidden w-[30rem] overflow-hidden rounded-xl border border-slate-200 bg-white p-2 shadow-xl"></div>
     </div>
     <div class="flex items-center gap-3">
         <div class="relative">
@@ -25,10 +26,28 @@
     </div>
 </header>
 <script>
-document.getElementById('globalSearch')?.addEventListener('input', event => {
-    const term = event.target.value.toLowerCase();
-    document.querySelectorAll('[data-searchable]').forEach(item => item.classList.toggle('hidden', !item.textContent.toLowerCase().includes(term)));
-});
+(() => {
+    const input = document.getElementById('globalSearch');
+    const results = document.getElementById('globalSearchResults');
+    if (!input || !results) return;
+    let timer;
+    const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    input.addEventListener('input', () => {
+        clearTimeout(timer);
+        const query = input.value.trim();
+        if (query.length < 2) { results.classList.add('hidden'); results.innerHTML = ''; return; }
+        timer = setTimeout(async () => {
+            try {
+                const response = await fetch(`/Search?q=${encodeURIComponent(query)}`);
+                if (!response.ok) throw new Error();
+                const payload = await response.json();
+                results.innerHTML = payload.items.length ? payload.items.map(item => `<a href="${escapeHtml(item.actionUrl)}" class="block rounded-lg p-3 hover:bg-slate-50"><span class="text-[10px] font-bold uppercase text-indigo-500">${escapeHtml(item.kind)}</span><strong class="block text-sm">${escapeHtml(item.title)}</strong><span class="line-clamp-2 text-xs text-slate-500">${escapeHtml(item.snippet)}</span></a>`).join('') : '<p class="p-4 text-sm text-slate-400">Nenhum resultado.</p>';
+                results.classList.remove('hidden');
+            } catch { results.innerHTML = '<p class="p-4 text-sm text-red-500">Falha na busca.</p>'; results.classList.remove('hidden'); }
+        }, 250);
+    });
+    document.addEventListener('click', event => { if (!results.contains(event.target) && event.target !== input) results.classList.add('hidden'); });
+})();
 (() => {
     const button = document.getElementById('notificationButton');
     const menu = document.getElementById('notificationMenu');
@@ -50,7 +69,17 @@ document.getElementById('globalSearch')?.addEventListener('input', event => {
         }
     };
     loadNotifications().catch(() => {});
-    window.setInterval(() => loadNotifications().catch(() => {}), 30000);
+    if (window.EventSource) {
+        const stream = new EventSource('/Notifications/Stream');
+        stream.addEventListener('notification', event => {
+            const payload = JSON.parse(event.data);
+            document.getElementById('notificationDot')?.classList.toggle('hidden', payload.unreadCount === 0);
+            loaded = false;
+            if (!menu?.classList.contains('hidden')) loadNotifications().catch(() => {});
+        });
+    } else {
+        window.setInterval(() => loadNotifications().catch(() => {}), 15000);
+    }
     button?.addEventListener('click', async event => {
         event.stopPropagation();
         menu.classList.toggle('hidden');

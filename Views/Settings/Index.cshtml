@@ -13,3 +13,16 @@
         <div class="mt-7 flex justify-end"><button class="rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white">Salvar alterações</button></div>
     </form>
 </div>
+<div class="mt-6 max-w-3xl rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div class="border-b border-slate-100 bg-slate-50/70 p-6"><h2 class="text-lg font-bold">Alertas e lembretes</h2><p class="text-xs text-slate-500">Escolha quais eventos exigem sua atenção.</p></div>
+    <form asp-action="UpdateNotifications" method="post" class="grid gap-4 p-6 sm:grid-cols-2">
+        <input type="hidden" name="inApp" value="false"/><input type="hidden" name="emailDigest" value="false"/><input type="hidden" name="dueReminders" value="false"/><input type="hidden" name="budgetAlerts" value="false"/><input type="hidden" name="mentionAlerts" value="false"/>
+        <label class="flex items-center gap-3 rounded-xl border p-4"><input type="checkbox" name="inApp" value="true" checked="@Model.Notifications.InApp"/><span><strong class="block text-sm">Alertas no aplicativo</strong><small class="text-slate-500">Atribuições e mudanças importantes</small></span></label>
+        <label class="flex items-center gap-3 rounded-xl border p-4"><input type="checkbox" name="mentionAlerts" value="true" checked="@Model.Notifications.MentionAlerts"/><span><strong class="block text-sm">Menções no chat</strong><small class="text-slate-500">Quando alguém mencionar você</small></span></label>
+        <label class="flex items-center gap-3 rounded-xl border p-4"><input type="checkbox" name="dueReminders" value="true" checked="@Model.Notifications.DueReminders"/><span><strong class="block text-sm">Prazos</strong><small class="text-slate-500">Tarefas próximas ou atrasadas</small></span></label>
+        <label class="flex items-center gap-3 rounded-xl border p-4"><input type="checkbox" name="budgetAlerts" value="true" checked="@Model.Notifications.BudgetAlerts"/><span><strong class="block text-sm">Orçamento</strong><small class="text-slate-500">Limites e desvios financeiros</small></span></label>
+        <label class="flex items-center gap-3 rounded-xl border p-4"><input type="checkbox" name="emailDigest" value="true" checked="@Model.Notifications.EmailDigest"/><span><strong class="block text-sm">Resumo por e-mail</strong><small class="text-slate-500">Preparado para integração de e-mail</small></span></label>
+        <label class="rounded-xl border p-4"><strong class="mb-2 block text-sm">Hora do resumo</strong><input type="number" min="0" max="23" name="digestHour" value="@Model.Notifications.DigestHour" class="field"/></label>
+        <div class="sm:col-span-2 flex justify-end"><button class="rounded-lg bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white">Salvar alertas</button></div>
+    </form>
+</div>

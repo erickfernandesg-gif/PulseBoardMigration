@@ -29,6 +29,7 @@ public class AdminViewModel
 public class SettingsViewModel
 {
     public Profile Profile { get; set; } = new();
+    public NotificationPreference Notifications { get; set; } = new();
 }
 
 public class ReportRow
@@ -71,7 +72,11 @@ public class ExecutiveViewModel
     public List<ExecutiveMetric> Projects { get; set; } = [];
     public List<ExecutiveMetric> Clients { get; set; } = [];
     public List<ExecutiveMetric> Workload { get; set; } = [];
+    public List<PerformancePersonMetric> PeoplePerformance { get; set; } = [];
+    public List<ProjectFinancialMetric> ProjectFinancials { get; set; } = [];
     public int EstimatedMinutes => Projects.Sum(x => x.EstimatedMinutes);
     public int LoggedMinutes => Projects.Sum(x => x.LoggedMinutes);
     public decimal TotalCost => Projects.Sum(x => x.Cost);
+    public decimal TotalBilledRevenue => ProjectFinancials.Sum(x => x.BilledRevenue);
+    public decimal TotalMargin => ProjectFinancials.Sum(x => x.GrossMargin);
 }

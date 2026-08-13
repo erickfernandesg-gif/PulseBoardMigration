@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PulseBoardMigration.Services;
+using PulseBoardMigration.Security;
 using System.Security.Claims;
 
 namespace PulseBoardMigration.Controllers;
 
-[Authorize]
+[Authorize(Policy = PulsePolicies.ManagerOrAdmin)]
 public class ManagementController : Controller
 {
     private readonly WorkManagementService _service;

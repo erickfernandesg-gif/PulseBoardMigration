@@ -136,6 +136,146 @@ public class BillingInvoiceItem : BaseModel
     [Column("created_at")] public DateTime CreatedAt { get; set; }
 }
 
+[Table("company_holidays")]
+public class CompanyHoliday : BaseModel
+{
+    [PrimaryKey("id", false)] public Guid Id { get; set; }
+    [Column("holiday_date")] public DateTime HolidayDate { get; set; }
+    [Column("name")] public string Name { get; set; } = string.Empty;
+    [Column("team_id")] public Guid? TeamId { get; set; }
+    [Column("created_by")] public Guid? CreatedBy { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; }
+}
+
+[Table("user_absences")]
+public class UserAbsence : BaseModel
+{
+    [PrimaryKey("id", false)] public Guid Id { get; set; }
+    [Column("user_id")] public Guid UserId { get; set; }
+    [Column("absence_type")] public string AbsenceType { get; set; } = "vacation";
+    [Column("starts_on")] public DateTime StartsOn { get; set; }
+    [Column("ends_on")] public DateTime EndsOn { get; set; }
+    [Column("notes")] public string? Notes { get; set; }
+    [Column("status")] public string Status { get; set; } = "approved";
+    [Column("created_by")] public Guid? CreatedBy { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; }
+}
+
+[Table("project_baselines")]
+public class ProjectBaseline : BaseModel
+{
+    [PrimaryKey("id", false)] public Guid Id { get; set; }
+    [Column("board_id")] public Guid BoardId { get; set; }
+    [Column("version")] public int Version { get; set; }
+    [Column("name")] public string Name { get; set; } = string.Empty;
+    [Column("planned_start")] public DateTime? PlannedStart { get; set; }
+    [Column("planned_end")] public DateTime? PlannedEnd { get; set; }
+    [Column("budget_amount")] public decimal? BudgetAmount { get; set; }
+    [Column("snapshot")] public Dictionary<string, object?> Snapshot { get; set; } = [];
+    [Column("created_by")] public Guid? CreatedBy { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; }
+}
+
+[Table("portfolio_dependencies")]
+public class PortfolioDependency : BaseModel
+{
+    [PrimaryKey("id", false)] public Guid Id { get; set; }
+    [Column("predecessor_board_id")] public Guid PredecessorBoardId { get; set; }
+    [Column("successor_board_id")] public Guid SuccessorBoardId { get; set; }
+    [Column("predecessor_task_id")] public Guid? PredecessorTaskId { get; set; }
+    [Column("successor_task_id")] public Guid? SuccessorTaskId { get; set; }
+    [Column("dependency_type")] public string DependencyType { get; set; } = "finish_to_start";
+    [Column("lag_days")] public int LagDays { get; set; }
+    [Column("created_by")] public Guid? CreatedBy { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; }
+}
+
+[Table("task_templates")]
+public class TaskTemplate : BaseModel
+{
+    [PrimaryKey("id", false)] public Guid Id { get; set; }
+    [Column("name")] public string Name { get; set; } = string.Empty;
+    [Column("description")] public string? Description { get; set; }
+    [Column("board_id")] public Guid? BoardId { get; set; }
+    [Column("team_id")] public Guid? TeamId { get; set; }
+    [Column("definition")] public Dictionary<string, object?> Definition { get; set; } = [];
+    [Column("is_active")] public bool IsActive { get; set; } = true;
+    [Column("created_by")] public Guid? CreatedBy { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; }
+}
+
+[Table("recurring_task_rules")]
+public class RecurringTaskRule : BaseModel
+{
+    [PrimaryKey("id", false)] public Guid Id { get; set; }
+    [Column("board_id")] public Guid BoardId { get; set; }
+    [Column("template_id")] public Guid? TemplateId { get; set; }
+    [Column("title")] public string Title { get; set; } = string.Empty;
+    [Column("description")] public string? Description { get; set; }
+    [Column("cadence")] public string Cadence { get; set; } = "weekly";
+    [Column("interval_count")] public int IntervalCount { get; set; } = 1;
+    [Column("next_run_at")] public DateTime NextRunAt { get; set; }
+    [Column("assigned_to")] public Guid? AssignedTo { get; set; }
+    [Column("estimated_minutes")] public int EstimatedMinutes { get; set; }
+    [Column("due_after_days")] public int DueAfterDays { get; set; }
+    [Column("is_active")] public bool IsActive { get; set; } = true;
+    [Column("custom_fields")] public Dictionary<string, object?> CustomFields { get; set; } = [];
+    [Column("created_by")] public Guid? CreatedBy { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; }
+    [Column("last_run_at")] public DateTime? LastRunAt { get; set; }
+}
+
+[Table("task_mentions")]
+public class TaskMention : BaseModel
+{
+    [PrimaryKey("id", false)] public Guid Id { get; set; }
+    [Column("task_id")] public Guid TaskId { get; set; }
+    [Column("comment_id")] public Guid CommentId { get; set; }
+    [Column("mentioned_user_id")] public Guid MentionedUserId { get; set; }
+    [Column("mentioned_by")] public Guid MentionedBy { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; }
+}
+
+[Table("task_files")]
+public class TaskFile : BaseModel
+{
+    [PrimaryKey("id", false)] public Guid Id { get; set; }
+    [Column("task_id")] public Guid TaskId { get; set; }
+    [Column("uploaded_by")] public Guid UploadedBy { get; set; }
+    [Column("storage_path")] public string StoragePath { get; set; } = string.Empty;
+    [Column("file_name")] public string FileName { get; set; } = string.Empty;
+    [Column("content_type")] public string ContentType { get; set; } = string.Empty;
+    [Column("file_size")] public long FileSize { get; set; }
+    [Column("description")] public string? Description { get; set; }
+    [Column("version")] public int Version { get; set; } = 1;
+    [Column("previous_version_id")] public Guid? PreviousVersionId { get; set; }
+    [Column("created_at")] public DateTime CreatedAt { get; set; }
+}
+
+[Table("notification_preferences")]
+public class NotificationPreference : BaseModel
+{
+    [PrimaryKey("user_id", false)] public Guid UserId { get; set; }
+    [Column("in_app")] public bool InApp { get; set; } = true;
+    [Column("email_digest")] public bool EmailDigest { get; set; }
+    [Column("due_reminders")] public bool DueReminders { get; set; } = true;
+    [Column("budget_alerts")] public bool BudgetAlerts { get; set; } = true;
+    [Column("mention_alerts")] public bool MentionAlerts { get; set; } = true;
+    [Column("digest_hour")] public short DigestHour { get; set; } = 8;
+    [Column("updated_at")] public DateTime UpdatedAt { get; set; }
+}
+
+public class WorkspaceSearchResult : BaseModel
+{
+    [Column("kind")] public string Kind { get; set; } = string.Empty;
+    [Column("id")] public Guid Id { get; set; }
+    [Column("board_id")] public Guid BoardId { get; set; }
+    [Column("title")] public string Title { get; set; } = string.Empty;
+    [Column("snippet")] public string? Snippet { get; set; }
+    [Column("action_url")] public string ActionUrl { get; set; } = string.Empty;
+    [Column("rank")] public float Rank { get; set; }
+}
+
 public class MyWorkViewModel
 {
     public Guid CurrentUserId { get; set; }
@@ -160,6 +300,9 @@ public class ManagementViewModel
     public List<PulseTask> Tasks { get; set; } = [];
     public List<WorkSchedule> Schedules { get; set; } = [];
     public List<TaskAssignment> Assignments { get; set; } = [];
+    public List<CompanyHoliday> Holidays { get; set; } = [];
+    public List<UserAbsence> Absences { get; set; } = [];
+    public List<PerformancePersonMetric> Performance { get; set; } = [];
 }
 
 public class ScheduleRow
@@ -176,6 +319,7 @@ public class ScheduleRow
     public decimal WidthPercent { get; set; }
     public bool IsOverdue { get; set; }
     public bool IsBlocked { get; set; }
+    public bool IsCritical { get; set; }
 }
 
 public class CompanyScheduleViewModel

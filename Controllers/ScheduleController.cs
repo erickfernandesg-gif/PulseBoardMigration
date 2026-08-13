@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PulseBoardMigration.Services;
+using PulseBoardMigration.Security;
 
 namespace PulseBoardMigration.Controllers;
 
-[Authorize]
+[Authorize(Policy = PulsePolicies.ManagerOrAdmin)]
 public class ScheduleController : Controller
 {
     private readonly WorkManagementService _service;

@@ -34,14 +34,17 @@ public class AuthController : Controller
     {
         try
         {
-            var session = await _authService.LoginAsync(email, password);
-            if (session?.User != null)
+            var login = await _authService.LoginAsync(email, password);
+            var session = login?.Session;
+            if (session?.User != null && login != null)
             {
                 var claims = new List<Claim>
                 {
                     new(ClaimTypes.Name, session.User.Email ?? email),
                     new(ClaimTypes.Email, session.User.Email ?? email),
-                    new(ClaimTypes.NameIdentifier, session.User.Id ?? string.Empty)
+                    new(ClaimTypes.NameIdentifier, session.User.Id ?? string.Empty),
+                    new(ClaimTypes.Role, login.Profile.Role),
+                    new("team_id", login.Profile.TeamId?.ToString() ?? string.Empty)
                 };
 
                 var identity = new ClaimsIdentity(
@@ -67,6 +70,10 @@ public class AuthController : Controller
                     ? LocalRedirect(returnUrl!)
                     : RedirectToAction("Index", "Dashboard");
             }
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            ModelState.AddModelError(string.Empty, exception.Message);
         }
         catch
         {

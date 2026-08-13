@@ -24,6 +24,7 @@ public class BoardService
 
     public async Task<Board?> CreateBoardAsync(string name, string? description, Guid ownerId, DateTime? plannedStart = null, DateTime? plannedEnd = null, decimal? budgetAmount = null)
     {
+        ValidateBoardInput(name, plannedStart, plannedEnd, budgetAmount);
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var board = new Board
         {
@@ -50,6 +51,23 @@ public class BoardService
         return response.Models.FirstOrDefault();
     }
 
+    public async Task<PulseTask?> CreateSubtaskAsync(Guid parentTaskId, Guid creatorId, string title,
+        Guid? assignedTo, DateTime? dueDate, int estimatedMinutes)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var parent = await client.From<PulseTask>().Where(x => x.Id == parentTaskId).Single()
+            ?? throw new InvalidOperationException("Tarefa principal não encontrada.");
+        return await CreateTaskAsync(new PulseTask
+        {
+            BoardId = parent.BoardId, ParentTaskId = parentTaskId, Title = title.Trim(),
+            Status = parent.Status == "done" ? "todo" : parent.Status, Priority = parent.Priority,
+            AssignedTo = assignedTo, AccountableOwnerId = parent.AccountableOwnerId ?? creatorId,
+            CreatedBy = creatorId, WorkflowState = assignedTo.HasValue ? "inbox" : "waiting_external",
+            DueDate = dueDate, ClientId = parent.ClientId, TargetMonth = parent.TargetMonth,
+            EstimatedMinutes = Math.Max(0, estimatedMinutes)
+        });
+    }
+
     public async Task<Board?> GetBoardByIdAsync(Guid boardId)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
@@ -60,7 +78,7 @@ public class BoardService
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var response = await client.From<PulseTask>().Where(t => t.BoardId == boardId).Get();
-        return response.Models
+        return response.Models.Where(t => t.ArchivedAt == null)
             .OrderBy(t => t.PositionIndex)
             .ThenBy(t => t.CreatedAt)
             .ToList();
@@ -76,9 +94,12 @@ public class BoardService
 
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var tasks = await client.From<PulseTask>().Where(t => t.BoardId == boardId).Get();
-        var profiles = await client.From<Profile>().Get();
+        // postgrest-csharp only accepts binary comparisons in expression trees.
+        // A bare boolean member (p => p.IsActive) cannot be translated to a REST filter.
+        var profiles = await client.From<Profile>().Where(p => p.IsActive == true).Get();
         var clients = await client.From<ClientAccount>().Get();
-        var taskIds = tasks.Models.Select(t => t.Id).ToHashSet();
+        var activeTasks = tasks.Models.Where(t => t.ArchivedAt == null).ToList();
+        var taskIds = activeTasks.Select(t => t.Id).ToHashSet();
 
         var collaborators = await client.From<TaskCollaborator>().Get();
         var comments = await client.From<TaskComment>().Get();
@@ -97,6 +118,7 @@ public class BoardService
         var activity = await client.From<ActivityLog>().Where(a => a.BoardId == boardId).Get();
         var assignments = await client.From<TaskAssignment>().Get();
         var dependencies = await client.From<TaskDependency>().Get();
+        var files = await client.From<TaskFile>().Get();
 
         var settings = board.Settings?.Count > 0
             ? board.Settings
@@ -110,7 +132,8 @@ public class BoardService
         return new BoardDetailsViewModel
         {
             Board = board,
-            Tasks = tasks.Models.OrderBy(t => t.PositionIndex).ThenBy(t => t.CreatedAt).ToList(),
+            Tasks = activeTasks.OrderBy(t => t.PositionIndex).ThenBy(t => t.CreatedAt).ToList(),
+            ArchivedTasks = tasks.Models.Where(t => t.ArchivedAt != null).OrderByDescending(t => t.ArchivedAt).ToList(),
             Columns = settings.Select(s => new Column { Id = s.Id, Title = s.Title }).ToList(),
             Profiles = profiles.Models.OrderBy(p => p.FullName ?? p.Email).ToList(),
             Clients = clients.Models.OrderBy(c => c.Name).ToList(),
@@ -122,6 +145,7 @@ public class BoardService
             Activity = activity.Models.OrderByDescending(x => x.CreatedAt).Take(100).ToList()
             ,Assignments = assignments.Models.Where(x => taskIds.Contains(x.TaskId)).ToList()
             ,Dependencies = dependencies.Models.Where(x => taskIds.Contains(x.TaskId)).ToList()
+            ,Files = files.Models.Where(x => taskIds.Contains(x.TaskId)).OrderByDescending(x => x.CreatedAt).ToList()
         };
     }
 
@@ -135,6 +159,7 @@ public class BoardService
         DateTime? plannedEnd = null,
         decimal? budgetAmount = null)
     {
+        ValidateBoardInput(name, plannedStart, plannedEnd, budgetAmount);
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var response = await client.From<Board>()
             .Where(b => b.Id == boardId)
@@ -152,8 +177,17 @@ public class BoardService
     public async Task<bool> DeleteBoardAsync(Guid boardId)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
-        await client.From<Board>().Where(b => b.Id == boardId).Delete();
-        return true;
+        var response = await client.From<Board>().Where(b => b.Id == boardId)
+            .Set(b => b.Status, "archived").Update();
+        return response.Models.Count > 0;
+    }
+
+    public async Task<bool> RestoreBoardAsync(Guid boardId)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var response = await client.From<Board>().Where(b => b.Id == boardId)
+            .Set(b => b.Status, "active").Update();
+        return response.Models.Count > 0;
     }
 
     public async Task<PulseTask?> CreateTaskAsync(
@@ -161,9 +195,8 @@ public class BoardService
         IEnumerable<Guid>? collaboratorIds = null,
         bool anonymous = false)
     {
-        var client = anonymous
-            ? _clientFactory.CreateAnonymousClient()
-            : await _clientFactory.CreateForCurrentUserAsync();
+        if (anonymous) throw new InvalidOperationException("O cadastro público de tarefas está desativado por segurança.");
+        var client = await _clientFactory.CreateForCurrentUserAsync();
 
         task.Title = task.Title.Trim();
         task.Description = task.Description?.Trim();
@@ -175,41 +208,19 @@ public class BoardService
         task.UpdatedAt = DateTime.UtcNow;
         task.CompletedAt = task.Status == "done" ? DateTime.UtcNow : null;
 
-        if (!anonymous)
+        await EnsureBoardAndStatusAsync(client, task.BoardId, task.Status);
+        task.Id = task.Id == Guid.Empty ? Guid.NewGuid() : task.Id;
+        await client.Rpc("create_task_atomic", new
         {
-            await EnsureBoardAndStatusAsync(client, task.BoardId, task.Status);
-            var existingTasks = await client.From<PulseTask>()
-                .Where(existing => existing.BoardId == task.BoardId)
-                .Get();
-            task.PositionIndex = existingTasks.Models
-                .Where(existing => existing.Status == task.Status)
-                .Select(existing => existing.PositionIndex)
-                .DefaultIfEmpty(-1)
-                .Max() + 1;
-        }
-
-        var response = await client.From<PulseTask>().Insert(task);
-        var created = response.Models.FirstOrDefault();
-        if (created == null)
-        {
-            return created;
-        }
-        if (anonymous && collaboratorIds == null)
-        {
-            return created;
-        }
-
-        try
-        {
-            await ReplaceCollaboratorsAsync(client, created.Id, collaboratorIds ?? []);
-        }
-        catch
-        {
-            await client.From<PulseTask>().Where(existing => existing.Id == created.Id).Delete();
-            throw;
-        }
-
-        return created;
+            p_task_id = task.Id, p_board_id = task.BoardId, p_title = task.Title,
+            p_description = task.Description, p_status = task.Status, p_priority = task.Priority,
+            p_start_date = task.StartDate, p_due_date = task.DueDate, p_assigned_to = task.AssignedTo,
+            p_accountable_owner_id = task.AccountableOwnerId, p_created_by = task.CreatedBy,
+            p_workflow_state = task.WorkflowState, p_client_id = task.ClientId, p_target_month = task.TargetMonth,
+            p_estimated_minutes = task.EstimatedMinutes, p_parent_task_id = task.ParentTaskId,
+            p_collaborator_ids = (collaboratorIds ?? []).Where(id => id != Guid.Empty).Distinct().ToArray()
+        });
+        return await client.From<PulseTask>().Where(existing => existing.Id == task.Id).Single();
     }
 
     public async Task<PulseTask?> UpdateTaskAsync(
@@ -227,66 +238,29 @@ public class BoardService
         }
 
         await EnsureBoardAndStatusAsync(client, task.BoardId, task.Status);
-        var currentCollaborators = await client.From<TaskCollaborator>()
-            .Where(collaborator => collaborator.TaskId == task.Id)
-            .Get();
-
-        DateTime? completedAt = task.Status == "done"
-            ? existingTask.CompletedAt ?? DateTime.UtcNow
-            : null;
-        var response = await client.From<PulseTask>()
-            .Where(t => t.Id == task.Id)
-            .Set(t => t.Title, task.Title.Trim())
-            .Set(t => t.Description!, task.Description?.Trim())
-            .Set(t => t.Status, task.Status)
-            .Set(t => t.Priority, NormalizePriority(task.Priority))
-            .Set(t => t.StartDate, task.StartDate)
-            .Set(t => t.DueDate, task.DueDate)
-            .Set(t => t.CompletedAt, completedAt)
-            .Set(t => t.AssignedTo, task.AssignedTo)
-            .Set(t => t.TargetMonth!, task.TargetMonth)
-            .Set(t => t.IsBlocked, task.IsBlocked)
-            .Set(t => t.BlockerReason!, task.IsBlocked ? task.BlockerReason?.Trim() : null)
-            .Set(t => t.ClientId, task.ClientId)
-            .Set(t => t.EstimatedMinutes, Math.Max(0, task.EstimatedMinutes))
-            .Set(t => t.UpdatedAt, DateTime.UtcNow)
-            .Update();
-
-        if (response.Models.Count == 0)
+        await client.Rpc("update_task_atomic", new
         {
-            return null;
-        }
-
-        try
-        {
-            await ReplaceCollaboratorsAsync(client, task.Id, collaboratorIds ?? []);
-        }
-        catch
-        {
-            await ReplaceCollaboratorsAsync(
-                client,
-                task.Id,
-                currentCollaborators.Models.Select(collaborator => collaborator.UserId));
-            throw;
-        }
-
-        return response.Models.FirstOrDefault();
+            p_task_id = task.Id, p_expected_version = task.RowVersion,
+            p_title = task.Title.Trim(), p_description = task.Description?.Trim(),
+            p_status = task.Status, p_priority = NormalizePriority(task.Priority), p_start_date = task.StartDate,
+            p_due_date = task.DueDate, p_assigned_to = task.AssignedTo, p_client_id = task.ClientId,
+            p_target_month = string.IsNullOrWhiteSpace(task.TargetMonth) ? null : task.TargetMonth.Trim(),
+            p_estimated_minutes = Math.Max(0, task.EstimatedMinutes), p_sla_minutes = task.SlaMinutes,
+            p_planned_value = task.PlannedValue, p_custom_fields = task.CustomFields,
+            p_is_blocked = task.IsBlocked, p_blocker_reason = task.BlockerReason,
+            p_collaborator_ids = (collaboratorIds ?? []).Where(id => id != Guid.Empty).Distinct().ToArray()
+        });
+        return await client.From<PulseTask>().Where(existing => existing.Id == task.Id).Single();
     }
 
     public async Task<bool> MoveTaskAsync(Guid taskId, string newStatus, int positionIndex)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
-        var currentResponse = await client.From<PulseTask>().Where(t => t.Id == taskId).Get();
-        var current = currentResponse.Models.FirstOrDefault();
-        if (current == null) return false;
-        var response = await client.From<PulseTask>()
-            .Where(t => t.Id == taskId)
-            .Set(t => t.Status, newStatus)
-            .Set(t => t.PositionIndex, Math.Max(0, positionIndex))
-            .Set(t => t.CompletedAt, newStatus == "done" ? current.CompletedAt ?? DateTime.UtcNow : null)
-            .Set(t => t.WorkflowState, newStatus == "done" ? "done" : current.WorkflowState == "done" ? "in_progress" : current.WorkflowState)
-            .Update();
-        return response.Models.Count > 0;
+        await client.Rpc("move_task_atomic", new
+        {
+            p_task_id = taskId, p_new_status = newStatus.Trim(), p_position = Math.Max(0, positionIndex)
+        });
+        return true;
     }
 
     public async Task<bool> UpdateTaskScheduleAsync(Guid taskId, DateTime startDate, DateTime dueDate)
@@ -310,7 +284,14 @@ public class BoardService
     public async Task<bool> DeleteTaskAsync(Guid taskId)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
-        await client.From<PulseTask>().Where(t => t.Id == taskId).Delete();
+        await client.Rpc("archive_task", new { p_task_id = taskId });
+        return true;
+    }
+
+    public async Task<bool> RestoreTaskAsync(Guid taskId)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        await client.Rpc("restore_task", new { p_task_id = taskId });
         return true;
     }
 
@@ -319,7 +300,9 @@ public class BoardService
         Guid userId,
         string? content,
         IReadOnlyList<CommentImageUpload>? images = null,
-        string messageType = "message")
+        string messageType = "message",
+        Guid? replyToId = null,
+        IReadOnlyList<Guid>? mentionedUserIds = null)
     {
         images ??= [];
         var normalizedContent = content?.Trim() ?? string.Empty;
@@ -333,16 +316,32 @@ public class BoardService
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var task = await client.From<PulseTask>().Where(t => t.Id == taskId).Single()
             ?? throw new InvalidOperationException("Tarefa não encontrada ou sem acesso.");
+        if (replyToId.HasValue)
+        {
+            var replied = await client.From<TaskComment>().Where(c => c.Id == replyToId.Value).Single();
+            if (replied == null || replied.TaskId != taskId || replied.DeletedAt.HasValue)
+                throw new InvalidOperationException("A mensagem respondida não pertence a esta tarefa.");
+        }
         var response = await client.From<TaskComment>().Insert(new TaskComment
         {
             TaskId = taskId,
             UserId = userId,
             Content = string.IsNullOrWhiteSpace(normalizedContent) ? "Imagem anexada" : normalizedContent,
             MessageType = messageType,
+            ReplyToId = replyToId,
             CreatedAt = DateTime.UtcNow
         });
         var comment = response.Models.FirstOrDefault();
-        if (comment == null || images.Count == 0) return comment;
+        if (comment == null) return null;
+        foreach (var mentionedUserId in (mentionedUserIds ?? []).Where(id => id != Guid.Empty && id != userId).Distinct())
+        {
+            await client.From<TaskMention>().Insert(new TaskMention
+            {
+                TaskId = taskId, CommentId = comment.Id, MentionedUserId = mentionedUserId,
+                MentionedBy = userId, CreatedAt = DateTime.UtcNow
+            });
+        }
+        if (images.Count == 0) return comment;
 
         var storage = _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket);
         var uploadedPaths = new List<string>();
@@ -444,6 +443,53 @@ public class BoardService
         var bytes = await _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket)
             .Download(attachment.StoragePath, (EventHandler<float>?)null);
         return new CommentAttachmentContent(attachment.FileName, attachment.ContentType, bytes);
+    }
+
+    public async Task<TaskFile?> AddTaskFileAsync(Guid taskId, Guid userId, string fileName, string contentType,
+        byte[] content, string? description, Guid? previousVersionId = null)
+    {
+        if (content.Length == 0 || content.Length > 25 * 1024 * 1024)
+            throw new InvalidOperationException("O arquivo deve ter no máximo 25 MB.");
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var task = await client.From<PulseTask>().Where(x => x.Id == taskId).Single()
+            ?? throw new InvalidOperationException("Tarefa não encontrada.");
+        var version = 1;
+        if (previousVersionId.HasValue)
+        {
+            var previous = await client.From<TaskFile>().Where(x => x.Id == previousVersionId.Value).Single();
+            if (previous == null || previous.TaskId != taskId) throw new InvalidOperationException("Versão anterior inválida.");
+            version = previous.Version + 1;
+        }
+        var safeExtension = Path.GetExtension(fileName).ToLowerInvariant();
+        if (safeExtension.Length > 10) safeExtension = string.Empty;
+        var storagePath = $"files/{task.BoardId:N}/{taskId:N}/{Guid.NewGuid():N}{safeExtension}";
+        await _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket).Upload(content, storagePath,
+            new Supabase.Storage.FileOptions { CacheControl = "3600", ContentType = contentType, Upsert = false });
+        try
+        {
+            var inserted = await client.From<TaskFile>().Insert(new TaskFile
+            {
+                TaskId = taskId, UploadedBy = userId, StoragePath = storagePath, FileName = Path.GetFileName(fileName),
+                ContentType = contentType, FileSize = content.LongLength, Description = description?.Trim(),
+                Version = version, PreviousVersionId = previousVersionId, CreatedAt = DateTime.UtcNow
+            });
+            return inserted.Models.FirstOrDefault();
+        }
+        catch
+        {
+            await _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket).Remove([storagePath]);
+            throw;
+        }
+    }
+
+    public async Task<CommentAttachmentContent?> GetTaskFileAsync(Guid id)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var file = await client.From<TaskFile>().Where(x => x.Id == id).Single();
+        if (file == null) return null;
+        var bytes = await _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket)
+            .Download(file.StoragePath, (EventHandler<float>?)null);
+        return new CommentAttachmentContent(file.FileName, file.ContentType, bytes);
     }
 
     private static string ImageExtension(string contentType) => contentType.ToLowerInvariant() switch
@@ -585,5 +631,14 @@ public class BoardService
         "on_hold" => "on_hold",
         _ => "on_track"
     };
+
+    private static void ValidateBoardInput(string? name, DateTime? plannedStart, DateTime? plannedEnd, decimal? budgetAmount)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 120)
+            throw new InvalidOperationException("O nome do quadro deve ter entre 1 e 120 caracteres.");
+        if (plannedStart.HasValue && plannedEnd.HasValue && plannedEnd.Value.Date < plannedStart.Value.Date)
+            throw new InvalidOperationException("O fim planejado não pode ser anterior ao início.");
+        if (budgetAmount < 0) throw new InvalidOperationException("O orçamento não pode ser negativo.");
+    }
 }
 #pragma warning restore CS8603

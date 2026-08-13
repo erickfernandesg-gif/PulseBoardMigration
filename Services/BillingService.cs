@@ -92,6 +92,24 @@ public class BillingService
     {
         if (periodEnd.Date < periodStart.Date) throw new InvalidOperationException("Período de faturamento inválido.");
         var client = await _clientFactory.CreateForCurrentUserAsync();
+        try
+        {
+            var invoiceId = await client.Rpc<Guid>("generate_billing_invoice", new
+            {
+                p_client_id = clientId,
+                p_creator_id = creatorId,
+                p_period_start = periodStart.Date,
+                p_period_end = periodEnd.Date,
+                p_due_date = dueDate?.Date
+            });
+            return await client.From<BillingInvoice>().Where(x => x.Id == invoiceId).Single()
+                ?? throw new InvalidOperationException("Não foi possível recuperar a fatura criada.");
+        }
+        catch (Postgrest.Exceptions.PostgrestException exception)
+            when (exception.Content?.Contains("PGRST202", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            // Compatibilidade temporária para instalações que ainda não executaram enterprise_upgrade.sql.
+        }
         var tasks = await client.From<PulseTask>().Get();
         var logs = await client.From<TimeLog>().Get();
         var contracts = await client.From<ClientContract>().Get();

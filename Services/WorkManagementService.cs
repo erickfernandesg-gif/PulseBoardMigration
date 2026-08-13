@@ -1,4 +1,5 @@
 using PulseBoardMigration.Models;
+using PulseBoardMigration.Domain;
 
 #pragma warning disable CS8603 // Postgrest Set<T?> expression trees report nullable false positives.
 
@@ -25,7 +26,7 @@ public class WorkManagementService
         return new MyWorkViewModel
         {
             CurrentUserId = userId,
-            Tasks = tasks.Models.OrderBy(x => x.DueDate ?? DateTime.MaxValue).ToList(),
+            Tasks = tasks.Models.Where(x => x.ArchivedAt == null).OrderBy(x => x.DueDate ?? DateTime.MaxValue).ToList(),
             Boards = boards.Models.ToList(),
             Profiles = profiles.Models.ToList(),
             Assignments = assignments.Models.OrderByDescending(x => x.CreatedAt).ToList(),
@@ -60,6 +61,27 @@ public class WorkManagementService
                 .Set(x => x.ReadAt, DateTime.UtcNow)
                 .Update();
         }
+    }
+
+    public async Task<NotificationPreference> GetNotificationPreferenceAsync(Guid userId)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        return await client.From<NotificationPreference>().Where(x => x.UserId == userId).Single()
+            ?? new NotificationPreference { UserId = userId, UpdatedAt = DateTime.UtcNow };
+    }
+
+    public async Task SaveNotificationPreferenceAsync(NotificationPreference preference)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var existing = await client.From<NotificationPreference>().Where(x => x.UserId == preference.UserId).Single();
+        preference.DigestHour = (short)Math.Clamp((int)preference.DigestHour, 0, 23);
+        preference.UpdatedAt = DateTime.UtcNow;
+        if (existing == null) { await client.From<NotificationPreference>().Insert(preference); return; }
+        await client.From<NotificationPreference>().Where(x => x.UserId == preference.UserId)
+            .Set(x => x.InApp, preference.InApp).Set(x => x.EmailDigest, preference.EmailDigest)
+            .Set(x => x.DueReminders, preference.DueReminders).Set(x => x.BudgetAlerts, preference.BudgetAlerts)
+            .Set(x => x.MentionAlerts, preference.MentionAlerts).Set(x => x.DigestHour, preference.DigestHour)
+            .Set(x => x.UpdatedAt, DateTime.UtcNow).Update();
     }
 
     public async Task HandoffAsync(
@@ -162,10 +184,49 @@ public class WorkManagementService
         var tasks = await client.From<PulseTask>().Get();
         var schedules = await client.From<WorkSchedule>().Get();
         var assignments = await client.From<TaskAssignment>().Get();
+        var holidays = await client.From<CompanyHoliday>().Get();
+        var absences = await client.From<UserAbsence>().Get();
+        var activeTasks = tasks.Models.Where(x => x.ArchivedAt == null).ToList();
         var visibleProfiles = current.Role == "admin"
             ? profiles.Models
             : profiles.Models.Where(x => x.TeamId == current.TeamId).ToList();
         var visibleIds = visibleProfiles.Select(x => x.Id).ToHashSet();
+
+        var today = DateTime.UtcNow.Date;
+        var weekEnd = today.AddDays(6);
+        var performance = visibleProfiles.Select(person =>
+        {
+            var owned = activeTasks.Where(x => x.AssignedTo == person.Id).ToList();
+            var completed = owned.Where(x => x.Status == "done").ToList();
+            var schedule = schedules.Models.FirstOrDefault(x => x.UserId == person.Id && x.ValidTo == null);
+            var capacity = schedule?.WeeklyCapacityMinutes ?? 2400;
+            var unavailableDates = new HashSet<DateTime>();
+            foreach (var absence in absences.Models.Where(x => x.UserId == person.Id && x.Status == "approved" && x.StartsOn.Date <= weekEnd && x.EndsOn.Date >= today))
+            {
+                for (var day = absence.StartsOn.Date < today ? today : absence.StartsOn.Date;
+                     day <= (absence.EndsOn.Date > weekEnd ? weekEnd : absence.EndsOn.Date); day = day.AddDays(1))
+                    if (day.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)) unavailableDates.Add(day);
+            }
+            foreach (var holiday in holidays.Models.Where(x => x.HolidayDate.Date >= today && x.HolidayDate.Date <= weekEnd && (!x.TeamId.HasValue || x.TeamId == person.TeamId)))
+                if (holiday.HolidayDate.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)) unavailableDates.Add(holiday.HolidayDate.Date);
+            var unavailableDays = unavailableDates.Count;
+            var effectiveCapacity = WorkRules.EffectiveWeeklyCapacity(capacity, unavailableDays);
+            var activeEstimate = owned.Where(x => x.Status != "done" && (x.StartDate ?? today) <= weekEnd && (x.DueDate ?? weekEnd) >= today).Sum(x => x.EstimatedMinutes);
+            var onTime = completed.Count(x => !x.DueDate.HasValue || x.CompletedAt <= x.DueDate);
+            var rework = assignments.Models.Count(x => x.ToUserId == person.Id && x.Status == "rejected");
+            return new PerformancePersonMetric
+            {
+                UserId = person.Id, Name = person.FullName ?? person.Email,
+                CompletedTasks = completed.Count, OpenTasks = owned.Count(x => x.Status != "done"),
+                OverdueTasks = owned.Count(x => x.Status != "done" && x.DueDate < today),
+                BlockedTasks = owned.Count(x => x.IsBlocked), EstimatedMinutes = owned.Sum(x => x.EstimatedMinutes),
+                LoggedMinutes = owned.Sum(x => x.TotalMinutesSpent), OnTimePercent = completed.Count == 0 ? 0 : onTime * 100m / completed.Count,
+                EstimateAccuracyPercent = WorkRules.EstimateAccuracyPercent(owned.Sum(x => x.EstimatedMinutes), owned.Sum(x => x.TotalMinutesSpent)),
+                ReworkPercent = completed.Count + rework == 0 ? 0 : rework * 100m / (completed.Count + rework),
+                UtilizationPercent = WorkRules.UtilizationPercent(activeEstimate, effectiveCapacity),
+                AvailableHours = Math.Max(0, effectiveCapacity - activeEstimate) / 60m
+            };
+        }).ToList();
 
         return new ManagementViewModel
         {
@@ -173,9 +234,12 @@ public class WorkManagementService
             Profiles = visibleProfiles.OrderBy(x => x.FullName ?? x.Email).ToList(),
             Teams = teams.Models.ToList(),
             Boards = boards.Models.ToList(),
-            Tasks = tasks.Models.Where(x => x.AssignedTo.HasValue && visibleIds.Contains(x.AssignedTo.Value)).ToList(),
+            Tasks = activeTasks.Where(x => x.AssignedTo.HasValue && visibleIds.Contains(x.AssignedTo.Value)).ToList(),
             Schedules = schedules.Models.ToList(),
-            Assignments = assignments.Models.ToList()
+            Assignments = assignments.Models.ToList(),
+            Holidays = holidays.Models.ToList(),
+            Absences = absences.Models.ToList(),
+            Performance = performance
         };
     }
 
@@ -215,8 +279,18 @@ public class WorkManagementService
         var boards = await client.From<Board>().Get();
         var profiles = await client.From<Profile>().Get();
         var milestones = await client.From<ProjectMilestone>().Get();
+        var dependencies = await client.From<TaskDependency>().Get();
+        var criticalIds = boards.Models.SelectMany(board =>
+        {
+            var projectTasks = tasks.Models.Where(x => x.BoardId == board.Id && x.ArchivedAt == null).ToList();
+            var projectIds = projectTasks.Select(x => x.Id).ToHashSet();
+            return CriticalPathRules.Calculate(
+                projectTasks.Select(x => (x.Id, x.EstimatedMinutes)),
+                dependencies.Models.Where(x => projectIds.Contains(x.TaskId) && projectIds.Contains(x.DependsOnTaskId))
+                    .Select(x => (x.TaskId, x.DependsOnTaskId)));
+        }).ToHashSet();
 
-        var rows = tasks.Models
+        var rows = tasks.Models.Where(x => x.ArchivedAt == null)
             .Where(x => x.StartDate.HasValue || x.DueDate.HasValue)
             .Select(task =>
             {
@@ -238,7 +312,8 @@ public class WorkManagementService
                     LeftPercent = Math.Clamp((decimal)((clippedStart - rangeStart).TotalDays / totalDays * 100), 0, 100),
                     WidthPercent = Math.Clamp((decimal)(((clippedEnd - clippedStart).TotalDays + 1) / totalDays * 100), 0.7m, 100),
                     IsOverdue = task.Status != "done" && end < DateTime.UtcNow.Date,
-                    IsBlocked = task.IsBlocked
+                    IsBlocked = task.IsBlocked,
+                    IsCritical = criticalIds.Contains(task.Id)
                 };
             })
             .Where(x => x.End >= rangeStart && x.Start <= rangeEnd)
@@ -274,10 +349,10 @@ public class WorkManagementService
             throw new InvalidOperationException("Dependência inválida.");
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var tasks = await client.From<PulseTask>().Get();
-        var task = tasks.Models.FirstOrDefault(x => x.Id == taskId);
-        var dependency = tasks.Models.FirstOrDefault(x => x.Id == dependsOnTaskId);
-        if (task == null || dependency == null || task.BoardId != dependency.BoardId)
-            throw new InvalidOperationException("As tarefas precisam pertencer ao mesmo projeto.");
+        var task = tasks.Models.FirstOrDefault(x => x.Id == taskId && x.ArchivedAt == null);
+        var dependency = tasks.Models.FirstOrDefault(x => x.Id == dependsOnTaskId && x.ArchivedAt == null);
+        if (task == null || dependency == null)
+            throw new InvalidOperationException("As tarefas precisam existir e estar ativas.");
         await client.From<TaskDependency>().Insert(new TaskDependency
         {
             TaskId = taskId,

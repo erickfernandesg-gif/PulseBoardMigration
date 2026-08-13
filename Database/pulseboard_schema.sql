@@ -244,6 +244,16 @@ drop trigger if exists execute_task_automations on public.tasks;
 create trigger execute_task_automations before update of status on public.tasks
 for each row when(old.status is distinct from new.status) execute function public.execute_task_automations();
 
+create schema if not exists private;
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
+create or replace function private.task_is_participant(target_task_id uuid)
+returns boolean language sql stable security definer set search_path=''
+as $$ select (select auth.uid()) is not null and
+  exists(select 1 from public.task_collaborators c where c.task_id=target_task_id and c.user_id=(select auth.uid())) $$;
+revoke execute on function private.task_is_participant(uuid) from public, anon, service_role;
+grant execute on function private.task_is_participant(uuid) to authenticated;
+
 alter table public.teams enable row level security;
 alter table public.profiles enable row level security;
 alter table public.user_rates enable row level security;
@@ -290,7 +300,7 @@ create policy boards_delete on public.boards for delete to authenticated using(o
 create policy tasks_read on public.tasks for select to authenticated using(
   public.is_manager() or assigned_to=auth.uid()
   or exists(select 1 from public.boards b where b.id=board_id and b.owner_id=auth.uid())
-  or exists(select 1 from public.task_collaborators c where c.task_id=id and c.user_id=auth.uid())
+  or (select private.task_is_participant(public.tasks.id))
 );
 create policy tasks_insert on public.tasks for insert to authenticated with check(true);
 create policy tasks_public_insert on public.tasks for insert to anon with check(status='backlog' and assigned_to is null);
@@ -832,6 +842,12 @@ end $$;
 alter table public.notifications enable row level security;
 alter table public.task_assignments enable row level security;
 alter table public.task_followers enable row level security;
+create or replace function private.task_is_participant(target_task_id uuid)
+returns boolean language sql stable security definer set search_path=''
+as $$ select (select auth.uid()) is not null and (
+  exists(select 1 from public.task_collaborators c where c.task_id=target_task_id and c.user_id=(select auth.uid()))
+  or exists(select 1 from public.task_followers f where f.task_id=target_task_id and f.user_id=(select auth.uid()))
+) $$;
 alter table public.task_dependencies enable row level security;
 alter table public.project_milestones enable row level security;
 alter table public.work_schedules enable row level security;
@@ -848,8 +864,7 @@ drop policy if exists tasks_read on public.tasks;
 create policy tasks_read on public.tasks for select to authenticated using(
   public.is_admin() or assigned_to=auth.uid() or accountable_owner_id=auth.uid() or created_by=auth.uid()
   or exists(select 1 from public.boards b where b.id=board_id and b.owner_id=auth.uid())
-  or exists(select 1 from public.task_collaborators c where c.task_id=id and c.user_id=auth.uid())
-  or exists(select 1 from public.task_followers f where f.task_id=id and f.user_id=auth.uid())
+  or (select private.task_is_participant(public.tasks.id))
   or (assigned_to is not null and public.can_manage_user(assigned_to)));
 drop policy if exists tasks_update on public.tasks;
 create policy tasks_update on public.tasks for update to authenticated using(

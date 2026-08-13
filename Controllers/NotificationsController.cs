@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PulseBoardMigration.Services;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace PulseBoardMigration.Controllers;
 
@@ -41,5 +42,31 @@ public class NotificationsController : Controller
 
         await _workService.MarkNotificationsReadAsync(userId, id);
         return Json(new { success = true });
+    }
+
+    [HttpGet]
+    public async Task Stream(CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+        {
+            Response.StatusCode = StatusCodes.Status401Unauthorized;
+            return;
+        }
+        Response.Headers.CacheControl = "no-cache";
+        Response.Headers.Connection = "keep-alive";
+        Response.ContentType = "text/event-stream";
+        var previousUnread = -1;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var items = await _workService.GetNotificationsAsync(userId, 20);
+            var unread = items.Count(x => x.ReadAt == null);
+            if (unread != previousUnread)
+            {
+                await Response.WriteAsync($"event: notification\ndata: {JsonSerializer.Serialize(new { unreadCount = unread })}\n\n", cancellationToken);
+                await Response.Body.FlushAsync(cancellationToken);
+                previousUnread = unread;
+            }
+            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+        }
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using PulseBoardMigration.Services;
+using PulseBoardMigration.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -23,6 +24,8 @@ builder.Services.AddScoped<WorkspaceService>();
 builder.Services.AddScoped<ReportingService>();
 builder.Services.AddScoped<WorkManagementService>();
 builder.Services.AddScoped<BillingService>();
+builder.Services.AddScoped<EnterpriseService>();
+builder.Services.AddScoped<BoardOperationsService>();
 
 builder.Services.AddControllersWithViews(options =>
 {
@@ -38,7 +41,12 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
     });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(PulsePolicies.AdminOnly, policy => policy.RequireRole("admin"));
+    options.AddPolicy(PulsePolicies.ManagerOrAdmin, policy => policy.RequireRole("admin", "manager"));
+    options.AddPolicy(PulsePolicies.FinanceAccess, policy => policy.RequireRole("admin", "manager"));
+});
 
 var app = builder.Build();
 

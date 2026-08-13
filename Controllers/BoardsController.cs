@@ -32,8 +32,16 @@ public class BoardsController : Controller
             return RedirectToAction(nameof(Index));
         }
 
-        await _boardService.CreateBoardAsync(name, description, userId, plannedStart, plannedEnd, budgetAmount);
-        TempData["Success"] = "Quadro criado com sucesso.";
+        try
+        {
+            await _boardService.CreateBoardAsync(name, description, userId, plannedStart, plannedEnd, budgetAmount);
+            TempData["Success"] = "Quadro criado com sucesso.";
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Falha ao criar quadro para {UserId}", userId);
+            TempData["Error"] = exception.Message;
+        }
         return RedirectToAction(nameof(Index));
     }
 
@@ -56,16 +64,36 @@ public class BoardsController : Controller
         DateTime? plannedEnd,
         decimal? budgetAmount)
     {
-        await _boardService.UpdateBoardAsync(boardId, name, description, status, health, plannedStart, plannedEnd, budgetAmount);
-        TempData["Success"] = "Quadro atualizado.";
+        try
+        {
+            var updated = await _boardService.UpdateBoardAsync(boardId, name, description, status, health, plannedStart, plannedEnd, budgetAmount);
+            TempData[updated ? "Success" : "Error"] = updated ? "Quadro atualizado." : "Quadro não encontrado ou sem permissão.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> DeleteBoard(Guid boardId)
     {
-        await _boardService.DeleteBoardAsync(boardId);
-        TempData["Success"] = "Quadro excluído.";
+        try
+        {
+            var archived = await _boardService.DeleteBoardAsync(boardId);
+            TempData[archived ? "Success" : "Error"] = archived ? "Quadro arquivado. O histórico foi preservado." : "Quadro não encontrado ou sem permissão.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> RestoreBoard(Guid boardId)
+    {
+        try
+        {
+            var restored = await _boardService.RestoreBoardAsync(boardId);
+            TempData[restored ? "Success" : "Error"] = restored ? "Quadro restaurado." : "Quadro não encontrado ou sem permissão.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
         return RedirectToAction(nameof(Index));
     }
 
@@ -106,7 +134,7 @@ public class BoardsController : Controller
                 StartDate = startDate,
                 DueDate = dueDate,
                 AssignedTo = assignedTo,
-                AccountableOwnerId = assignedTo ?? currentUserId,
+                AccountableOwnerId = currentUserId,
                 CreatedBy = currentUserId,
                 WorkflowState = assignedTo.HasValue ? "inbox" : "waiting_external",
                 ClientId = clientId,
@@ -136,6 +164,7 @@ public class BoardsController : Controller
     public async Task<IActionResult> UpdateTask(
         Guid taskId,
         Guid boardId,
+        long expectedVersion,
         string title,
         string? description,
         string columnId,
@@ -147,6 +176,9 @@ public class BoardsController : Controller
         string? targetMonth,
         int estimatedHours,
         int estimatedMinutes,
+        int? slaMinutes,
+        decimal? plannedValue,
+        string? customFieldsJson,
         bool isBlocked,
         string? blockerReason,
         List<Guid>? collaboratorIds)
@@ -167,9 +199,21 @@ public class BoardsController : Controller
 
         try
         {
+            Dictionary<string, object?> customFields;
+            try
+            {
+                customFields = string.IsNullOrWhiteSpace(customFieldsJson)
+                    ? []
+                    : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(customFieldsJson) ?? [];
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return BadRequest(new { success = false, message = "Os campos personalizados devem estar em JSON válido." });
+            }
             var updated = await _boardService.UpdateTaskAsync(new PulseTask
             {
                 Id = taskId,
+                RowVersion = expectedVersion,
                 BoardId = boardId,
                 Title = title,
                 Description = description,
@@ -181,6 +225,9 @@ public class BoardsController : Controller
                 ClientId = clientId,
                 TargetMonth = targetMonth,
                 EstimatedMinutes = checked(estimatedHours * 60 + estimatedMinutes),
+                SlaMinutes = slaMinutes.HasValue ? Math.Max(0, slaMinutes.Value) : null,
+                PlannedValue = plannedValue.HasValue ? Math.Max(0, plannedValue.Value) : null,
+                CustomFields = customFields,
                 IsBlocked = isBlocked,
                 BlockerReason = blockerReason
             }, collaboratorIds ?? []);
@@ -206,10 +253,17 @@ public class BoardsController : Controller
     [HttpPost]
     public async Task<IActionResult> MoveTask(Guid taskId, string newColumnId, int positionIndex = 0)
     {
-        var success = taskId != Guid.Empty &&
-                      !string.IsNullOrWhiteSpace(newColumnId) &&
-                      await _boardService.MoveTaskAsync(taskId, newColumnId, positionIndex);
-        return Json(new { success, message = success ? null : "Não foi possível mover a tarefa." });
+        try
+        {
+            var success = taskId != Guid.Empty && !string.IsNullOrWhiteSpace(newColumnId) &&
+                          await _boardService.MoveTaskAsync(taskId, newColumnId, positionIndex);
+            return Json(new { success, message = success ? null : "Não foi possível mover a tarefa." });
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Movimentação rejeitada para {TaskId}", taskId);
+            return BadRequest(new { success = false, message = exception.Message });
+        }
     }
 
     [HttpPost]
@@ -236,11 +290,20 @@ public class BoardsController : Controller
     [HttpPost]
     public async Task<IActionResult> DeleteTask(Guid taskId)
     {
-        return Json(new { success = await _boardService.DeleteTaskAsync(taskId) });
+        try { return Json(new { success = await _boardService.DeleteTaskAsync(taskId) }); }
+        catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
     }
 
     [HttpPost]
-    public async Task<IActionResult> AddComment(Guid taskId, string? content, List<IFormFile>? images)
+    public async Task<IActionResult> RestoreTask(Guid taskId)
+    {
+        try { return Json(new { success = await _boardService.RestoreTaskAsync(taskId) }); }
+        catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> AddComment(Guid taskId, string? content, List<IFormFile>? images,
+        Guid? replyToId, List<Guid>? mentionedUserIds)
     {
         if (!TryUserId(out var userId))
         {
@@ -250,7 +313,8 @@ public class BoardsController : Controller
         try
         {
             var uploads = await ReadChatImagesAsync(images ?? []);
-            var comment = await _boardService.AddCommentAsync(taskId, userId, content, uploads);
+            var comment = await _boardService.AddCommentAsync(taskId, userId, content, uploads,
+                replyToId: replyToId, mentionedUserIds: mentionedUserIds ?? []);
             return Json(new { success = comment != null, data = comment });
         }
         catch (InvalidOperationException exception)
@@ -262,6 +326,21 @@ public class BoardsController : Controller
             _logger.LogError(exception, "Falha ao adicionar mensagem na tarefa {TaskId}", taskId);
             return StatusCode(500, new { success = false, message = "Não foi possível enviar a mensagem." });
         }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> CreateSubtask(Guid parentTaskId, string title, Guid? assignedTo,
+        DateTime? dueDate, int estimatedMinutes)
+    {
+        if (!TryUserId(out var userId) || string.IsNullOrWhiteSpace(title))
+            return BadRequest(new { success = false, message = "Informe o título da subtarefa." });
+        try
+        {
+            if (title.Trim().Length > 200) throw new InvalidOperationException("O título deve ter no máximo 200 caracteres.");
+            var task = await _boardService.CreateSubtaskAsync(parentTaskId, userId, title, assignedTo, dueDate, estimatedMinutes);
+            return Json(new { success = task != null, data = task });
+        }
+        catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
     }
 
     [HttpPost]
@@ -302,6 +381,32 @@ public class BoardsController : Controller
     }
 
     [HttpPost]
+    public async Task<IActionResult> AddTaskFile(Guid taskId, IFormFile file, string? description, Guid? previousVersionId)
+    {
+        if (!TryUserId(out var userId) || file == null) return BadRequest(new { success = false });
+        if (file.Length <= 0 || file.Length > 25 * 1024 * 1024)
+            return BadRequest(new { success = false, message = "O arquivo deve ter no máximo 25 MB." });
+        if (description?.Length > 500) return BadRequest(new { success = false, message = "A descrição deve ter no máximo 500 caracteres." });
+        try
+        {
+        await using var stream = new MemoryStream();
+        await file.CopyToAsync(stream);
+        var created = await _boardService.AddTaskFileAsync(taskId, userId, file.FileName,
+            string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
+            stream.ToArray(), description, previousVersionId);
+        return Json(new { success = created != null, data = created });
+        }
+        catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> TaskFile(Guid id)
+    {
+        var file = await _boardService.GetTaskFileAsync(id);
+        return file == null ? NotFound() : File(file.Content, file.ContentType, file.FileName, true);
+    }
+
+    [HttpPost]
     public async Task<IActionResult> AddTimeLog(
         Guid taskId,
         int hours,
@@ -321,40 +426,46 @@ public class BoardsController : Controller
             return Json(new { success = false, message = "Informe um tempo maior que zero." });
         }
 
-        var log = await _boardService.AddTimeLogAsync(new TimeLog
+        try
         {
-            TaskId = taskId,
-            UserId = userId,
-            Minutes = total,
-            LogDate = logDate ?? DateTime.UtcNow.Date,
-            Description = description,
-            IsBillable = isBillable
-        });
-        return Json(new { success = log != null, data = log });
+            if (description?.Length > 1000) throw new InvalidOperationException("A descrição deve ter no máximo 1.000 caracteres.");
+            var log = await _boardService.AddTimeLogAsync(new TimeLog
+            {
+                TaskId = taskId, UserId = userId, Minutes = total,
+                LogDate = logDate ?? DateTime.UtcNow.Date, Description = description, IsBillable = isBillable
+            });
+            return Json(new { success = log != null, data = log });
+        }
+        catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
     }
 
     [HttpPost]
     public async Task<IActionResult> AddChecklistItem(Guid taskId, string title, int position)
     {
-        if (string.IsNullOrWhiteSpace(title))
+        if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 300)
         {
-            return Json(new { success = false });
+            return BadRequest(new { success = false, message = "O item deve ter entre 1 e 300 caracteres." });
         }
-
-        var item = await _boardService.AddChecklistItemAsync(taskId, title, position);
-        return Json(new { success = item != null, data = item });
+        try
+        {
+            var item = await _boardService.AddChecklistItemAsync(taskId, title, position);
+            return Json(new { success = item != null, data = item });
+        }
+        catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
     }
 
     [HttpPost]
     public async Task<IActionResult> ToggleChecklistItem(Guid id, bool completed)
     {
-        return Json(new { success = await _boardService.ToggleChecklistItemAsync(id, completed) });
+        try { return Json(new { success = await _boardService.ToggleChecklistItemAsync(id, completed) }); }
+        catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
     }
 
     [HttpPost]
     public async Task<IActionResult> DeleteChecklistItem(Guid id)
     {
-        return Json(new { success = await _boardService.DeleteChecklistItemAsync(id) });
+        try { return Json(new { success = await _boardService.DeleteChecklistItemAsync(id) }); }
+        catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
     }
 
     private bool TryUserId(out Guid userId)

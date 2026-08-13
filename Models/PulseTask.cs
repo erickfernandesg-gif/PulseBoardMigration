@@ -74,6 +74,39 @@ public class PulseTask : BaseModel
     [Column("estimated_minutes")]
     public int EstimatedMinutes { get; set; }
 
+    [Column("parent_task_id")]
+    public Guid? ParentTaskId { get; set; }
+
+    [Column("custom_fields")]
+    public Dictionary<string, object?> CustomFields { get; set; } = [];
+
+    [Column("sla_minutes")]
+    public int? SlaMinutes { get; set; }
+
+    [Column("sla_due_at")]
+    public DateTime? SlaDueAt { get; set; }
+
+    [Column("sla_level")]
+    public string? SlaLevel { get; set; }
+
+    [Column("baseline_start")]
+    public DateTime? BaselineStart { get; set; }
+
+    [Column("baseline_end")]
+    public DateTime? BaselineEnd { get; set; }
+
+    [Column("planned_value")]
+    public decimal? PlannedValue { get; set; }
+
+    [Column("archived_at")]
+    public DateTime? ArchivedAt { get; set; }
+
+    [Column("status_updated_at")]
+    public DateTime StatusUpdatedAt { get; set; }
+
+    [Column("row_version")]
+    public long RowVersion { get; set; } = 1;
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }
 

@@ -4,10 +4,11 @@
 <div class="grid gap-6 lg:grid-cols-3">
     <form asp-action="Save" method="post" class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
         <h2 class="text-lg font-bold">Nova regra</h2>
+        <input type="hidden" name="BoardId" value="@ViewBag.BoardId" />
         <div><label class="label">Nome</label><input name="Title" required class="field" /></div>
         <div><label class="label">Quando a tarefa chegar em</label><select name="TriggerValue" class="field"><option value="todo">A fazer</option><option value="in-progress">Em execução</option><option value="homologation">Homologação</option><option value="done">Concluído</option></select></div>
         <input type="hidden" name="TriggerType" value="status_change" />
-        <div><label class="label">Executar</label><select name="ActionType" class="field"><option value="notify_manager">Notificar gestor</option><option value="assign_user">Atribuir usuário</option></select></div>
+        <div><label class="label">Executar</label><select name="ActionType" class="field"><option value="notify_manager">Notificar gestor</option><option value="assign_user">Atribuir usuário</option><option value="move_status">Mover para etapa</option><option value="set_priority">Alterar prioridade</option><option value="set_due_days">Definir prazo em dias</option></select></div>
         <div><label class="label">Parâmetro da ação</label><input name="ActionPayload" class="field" placeholder="UUID ou e-mail" /></div>
         <input type="hidden" name="IsActive" value="true" />
         <button class="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-bold text-white">Criar automação</button>

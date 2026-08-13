@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PulseBoardMigration.Services;
+using PulseBoardMigration.Security;
 using System.Text;
 
 namespace PulseBoardMigration.Controllers;
 
-[Authorize]
+[Authorize(Policy = PulsePolicies.ManagerOrAdmin)]
 public class ReportsController : Controller
 {
     private readonly ReportingService _reportingService;

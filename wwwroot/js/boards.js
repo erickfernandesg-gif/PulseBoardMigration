@@ -202,16 +202,17 @@ function initDragAndDrop() {
             onEnd: async event => {
                 if (event.from === event.to && event.oldIndex === event.newIndex) return;
                 const card = event.item;
-                const result = await postForm('/Boards/MoveTask', {
-                    taskId: card.dataset.taskId,
-                    newColumnId: event.to.dataset.columnId,
-                    positionIndex: event.newIndex || 0
-                });
-                if (!result.success) {
-                    event.from.insertBefore(card, event.from.children[event.oldIndex] || null);
-                    alert(result.message || 'Não foi possível mover a tarefa.');
-                } else {
+                try {
+                    const result = await postForm('/Boards/MoveTask', {
+                        taskId: card.dataset.taskId,
+                        newColumnId: event.to.dataset.columnId,
+                        positionIndex: event.newIndex || 0
+                    });
+                    if (!result.success) throw new Error(result.message || 'Não foi possível mover a tarefa.');
                     card.dataset.status = event.to.dataset.columnId;
+                } catch (error) {
+                    event.from.insertBefore(card, event.from.children[event.oldIndex] || null);
+                    alert(error.message || 'Não foi possível mover a tarefa.');
                 }
             }
         });
@@ -221,7 +222,8 @@ function initDragAndDrop() {
 function initAjaxForms() {
     [
         'createTaskForm', 'editTaskForm', 'handoffTaskForm', 'deleteTaskForm',
-        'dependencyForm', 'returnQuestionForm', 'checklistForm', 'commentForm', 'timeLogForm'
+        'dependencyForm', 'returnQuestionForm', 'checklistForm', 'commentForm', 'timeLogForm',
+        'subtaskForm', 'taskFileForm'
     ].forEach(id => {
         const form = document.getElementById(id);
         if (!form) return;
@@ -367,7 +369,12 @@ async function postForm(url, values) {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body
     });
-    return response.json();
+    const contentType = response.headers.get('content-type') || '';
+    const result = contentType.includes('application/json')
+        ? await response.json()
+        : { success: false, message: 'O servidor retornou uma resposta inválida.' };
+    if (!response.ok) throw new Error(result.message || `Operação recusada (${response.status}).`);
+    return result;
 }
 
 window.openCreateTaskModal = columnId => {
@@ -402,6 +409,7 @@ window.openTaskDetailsModal = element => {
     handoffForm?.reset();
     if (handoffForm) clearFormError(handoffForm);
     document.getElementById('EditTaskId').value = taskId;
+    document.getElementById('EditExpectedVersion').value = get('rowVersion');
     document.getElementById('EditTitle').value = get('title');
     document.getElementById('EditDescription').value = get('description');
     document.getElementById('EditColumnId').value = get('status');
@@ -415,6 +423,9 @@ window.openTaskDetailsModal = element => {
     const estimated = Number(get('estimatedMinutes') || 0);
     document.getElementById('EditEstimatedHours').value = Math.floor(estimated / 60);
     document.getElementById('EditEstimatedMinutes').value = estimated % 60;
+    document.getElementById('EditSlaMinutes').value = get('slaMinutes');
+    document.getElementById('EditPlannedValue').value = get('plannedValue');
+    document.getElementById('EditCustomFields').value = get('customFields') || '{}';
     document.getElementById('EditIsBlocked').checked = get('isBlocked') === 'true';
     document.getElementById('EditBlockerReason').value = get('blockerReason');
     document.getElementById('EditBlockerReason').required = get('isBlocked') === 'true';
@@ -425,6 +436,13 @@ window.openTaskDetailsModal = element => {
     document.querySelectorAll('.dependency-task-option').forEach(option => {
         option.disabled = option.value === taskId;
         option.hidden = option.value === taskId;
+    });
+    const previousFile = document.getElementById('PreviousTaskFile');
+    if (previousFile) previousFile.value = '';
+    document.querySelectorAll('.task-file-version-option').forEach(option => {
+        const visible = option.dataset.taskId === taskId;
+        option.disabled = !visible;
+        option.hidden = !visible;
     });
     renderChatImagePreview([]);
     const template = document.getElementById(`task-extra-${taskId}`);
@@ -442,9 +460,17 @@ window.closeTaskDetailsModal = () => {
 };
 
 window.confirmDeleteTask = () => {
-    if (!confirm('Excluir esta tarefa e todos os dados associados?')) return;
+    if (!confirm('Arquivar esta tarefa? Conversas, horas e histórico serão preservados.')) return;
     document.getElementById('DeleteTaskId').value = document.getElementById('EditTaskId').value;
     document.getElementById('deleteTaskForm').requestSubmit();
+};
+
+window.restoreTask = async taskId => {
+    try {
+        const result = await postForm('/Boards/RestoreTask', { taskId });
+        if (!result.success) throw new Error(result.message || 'Não foi possível restaurar a tarefa.');
+        window.location.reload();
+    } catch (error) { alert(error.message || 'Não foi possível restaurar a tarefa.'); }
 };
 
 window.toggleChecklist = async (id, completed) => {

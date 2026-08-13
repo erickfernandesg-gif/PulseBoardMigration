@@ -12,6 +12,15 @@ public class BoardColumnSetting
 
     [JsonProperty("title")]
     public string Title { get; set; } = string.Empty;
+
+    [JsonProperty("color")]
+    public string Color { get; set; } = "#6366f1";
+
+    [JsonProperty("wip_limit")]
+    public int? WipLimit { get; set; }
+
+    [JsonProperty("requires_approval")]
+    public bool RequiresApproval { get; set; }
 }
 
 [Table("boards")]
@@ -47,6 +56,21 @@ public class Board : BaseModel
 
     [Column("budget_amount")]
     public decimal? BudgetAmount { get; set; }
+
+    [Column("baseline_start")]
+    public DateTime? BaselineStart { get; set; }
+
+    [Column("baseline_end")]
+    public DateTime? BaselineEnd { get; set; }
+
+    [Column("forecast_end")]
+    public DateTime? ForecastEnd { get; set; }
+
+    [Column("revenue_budget")]
+    public decimal? RevenueBudget { get; set; }
+
+    [Column("budget_warning_percent")]
+    public int BudgetWarningPercent { get; set; } = 80;
 
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }

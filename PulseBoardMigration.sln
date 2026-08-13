@@ -5,12 +5,18 @@ VisualStudioVersion = 17.14.37301.10 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PulseBoardMigration", "PulseBoardMigration.csproj", "{CF1355AE-C17B-4999-ACC9-FD56A3419CBE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PulseBoardMigration.Tests", "PulseBoardMigration.Tests\PulseBoardMigration.Tests.csproj", "{36D351AE-5A6C-4D5A-8F24-920427F04F46}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{36D351AE-5A6C-4D5A-8F24-920427F04F46}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{36D351AE-5A6C-4D5A-8F24-920427F04F46}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{36D351AE-5A6C-4D5A-8F24-920427F04F46}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{36D351AE-5A6C-4D5A-8F24-920427F04F46}.Release|Any CPU.Build.0 = Release|Any CPU
 		{CF1355AE-C17B-4999-ACC9-FD56A3419CBE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{CF1355AE-C17B-4999-ACC9-FD56A3419CBE}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CF1355AE-C17B-4999-ACC9-FD56A3419CBE}.Release|Any CPU.ActiveCfg = Release|Any CPU

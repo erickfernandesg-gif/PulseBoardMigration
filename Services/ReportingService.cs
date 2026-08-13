@@ -120,6 +120,54 @@ public class ReportingService
         }).Where(m => m.EstimatedMinutes > 0 || m.LoggedMinutes > 0)
           .OrderByDescending(m => m.EstimatedMinutes)
           .ToList();
+        var reportingClient = await _clientFactory.CreateForCurrentUserAsync();
+        var invoices = await reportingClient.From<BillingInvoice>().Get();
+        var invoiceItems = await reportingClient.From<BillingInvoiceItem>().Get();
+        var issuedInvoiceIds = invoices.Models
+            .Where(x => x.Status is "issued" or "paid")
+            .Select(x => x.Id)
+            .ToHashSet();
+        var financials = data.Boards.Select(board =>
+        {
+            var boardTasks = tasks.Where(x => x.BoardId == board.Id).ToList();
+            var ids = boardTasks.Select(x => x.Id).ToHashSet();
+            var boardLogs = logs.Where(x => ids.Contains(x.TaskId)).ToList();
+            var actual = boardLogs.Sum(x => x.CostRateSnapshot * x.Minutes / 60m);
+            var committed = boardTasks.Where(x => x.Status != "done").Sum(task =>
+            {
+                var rate = data.Rates.FirstOrDefault(x => x.UserId == task.AssignedTo)?.HourlyRate ?? 0;
+                return Math.Max(0, task.EstimatedMinutes - task.TotalMinutesSpent) * rate / 60m;
+            });
+            var boardLogIds = boardLogs.Select(x => x.Id).ToHashSet();
+            var billed = invoiceItems.Models
+                .Where(x => x.TimeLogId.HasValue && boardLogIds.Contains(x.TimeLogId.Value) && issuedInvoiceIds.Contains(x.InvoiceId))
+                .Sum(x => x.Amount);
+            var completion = boardTasks.Sum(x => x.EstimatedMinutes) == 0 ? 0 : boardTasks.Sum(x => Math.Min(x.TotalMinutesSpent, x.EstimatedMinutes)) * 100m / boardTasks.Sum(x => x.EstimatedMinutes);
+            return new ProjectFinancialMetric
+            {
+                BoardId = board.Id, Name = board.Name, Budget = board.BudgetAmount ?? 0,
+                RevenueBudget = board.RevenueBudget ?? 0, ActualCost = actual, CommittedCost = committed,
+                BilledRevenue = billed, ForecastAtCompletion = actual + committed,
+                ForecastEnd = board.ForecastEnd ?? (completion > 0 && board.PlannedStart.HasValue
+                    ? board.PlannedStart.Value.AddDays((DateTime.UtcNow.Date - board.PlannedStart.Value.Date).TotalDays * 100 / (double)completion)
+                    : board.PlannedEnd)
+            };
+        }).Where(x => x.Budget > 0 || x.ActualCost > 0 || x.BilledRevenue > 0).OrderByDescending(x => x.ActualCost).ToList();
+
+        var people = data.Profiles.Where(x => x.IsActive).Select(profile =>
+        {
+            var owned = tasks.Where(x => x.AssignedTo == profile.Id).ToList();
+            var completed = owned.Where(x => x.Status == "done").ToList();
+            var onTime = completed.Count(x => !x.DueDate.HasValue || x.CompletedAt <= x.DueDate);
+            return new PerformancePersonMetric
+            {
+                UserId = profile.Id, Name = profile.FullName ?? profile.Email, CompletedTasks = completed.Count,
+                OpenTasks = owned.Count(x => x.Status != "done"), OverdueTasks = owned.Count(x => x.Status != "done" && x.DueDate < DateTime.UtcNow.Date),
+                BlockedTasks = owned.Count(x => x.IsBlocked), EstimatedMinutes = owned.Sum(x => x.EstimatedMinutes),
+                LoggedMinutes = owned.Sum(x => x.TotalMinutesSpent), OnTimePercent = completed.Count == 0 ? 0 : onTime * 100m / completed.Count,
+                EstimateAccuracyPercent = owned.Sum(x => x.EstimatedMinutes) == 0 ? 0 : Math.Min(200, owned.Sum(x => x.TotalMinutesSpent) * 100m / owned.Sum(x => x.EstimatedMinutes))
+            };
+        }).OrderByDescending(x => x.CompletedTasks).ToList();
 
         return new ExecutiveViewModel
         {
@@ -127,7 +175,9 @@ public class ReportingService
             ToMonth = to,
             Projects = projectMetrics,
             Clients = clientMetrics,
-            Workload = workload
+            Workload = workload,
+            PeoplePerformance = people,
+            ProjectFinancials = financials
         };
     }
 

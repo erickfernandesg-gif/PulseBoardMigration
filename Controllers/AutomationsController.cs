@@ -15,8 +15,9 @@ public class AutomationsController : Controller
         _workspaceService = workspaceService;
     }
 
-    public async Task<IActionResult> Index()
+    public async Task<IActionResult> Index(Guid? boardId)
     {
+        ViewBag.BoardId = boardId;
         return View(await _workspaceService.GetAutomationsAsync());
     }
 
