@@ -20,6 +20,8 @@ ENV ASPNETCORE_URLS=http://+:10000 \
 
 EXPOSE 10000
 COPY --from=build /app/publish ./
+RUN mkdir -p /app/App_Data/keys \
+    && chown -R $APP_UID /app/App_Data
 
 USER $APP_UID
 ENTRYPOINT ["dotnet", "PulseBoardMigration.dll"]
