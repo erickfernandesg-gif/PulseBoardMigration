@@ -1,5 +1,6 @@
 html {
   font-size: 14px;
+  min-height: 100%;
 }
 
 @media (min-width: 768px) {
@@ -12,11 +13,50 @@ html {
   box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
 }
 
-html {
-  position: relative;
+body {
   min-height: 100%;
+  margin: 0;
 }
 
-body {
-  margin-bottom: 60px;
+/* Workspaces keep their navigation reachable even when a lane contains many items. */
+.kanban-board {
+  height: clamp(32rem, calc(100vh - 19rem), 58rem);
+  overscroll-behavior-inline: contain;
+  scrollbar-color: #94a3b8 #e2e8f0;
+  scrollbar-width: thin;
+}
+
+.kanban-column-body {
+  overscroll-behavior: contain;
+  scrollbar-color: #94a3b8 transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.kanban-board::-webkit-scrollbar,
+.kanban-column-body::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.kanban-board::-webkit-scrollbar-track {
+  border-radius: 9999px;
+  background: #e2e8f0;
+}
+
+.kanban-column-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.kanban-board::-webkit-scrollbar-thumb,
+.kanban-column-body::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+  background-color: #94a3b8;
+}
+
+.kanban-board::-webkit-scrollbar-thumb:hover,
+.kanban-column-body::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
 }

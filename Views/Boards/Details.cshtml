@@ -10,7 +10,7 @@
     };
 }
 
-<div class="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+<div class="mb-4 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
     <div class="flex items-center gap-4">
         <a asp-action="Index" class="flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50">
             <i data-lucide="arrow-left" class="h-5 w-5"></i>
@@ -51,22 +51,22 @@
     </div>
 </div>
 
-<div class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-    <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Total</p><p class="mt-1 text-2xl font-bold">@Model.Tasks.Count</p></div>
-    <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Concluídas</p><p class="mt-1 text-2xl font-bold text-emerald-600">@Model.Tasks.Count(t => t.Status == "done")</p></div>
-    <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Bloqueadas</p><p class="mt-1 text-2xl font-bold text-red-600">@Model.Tasks.Count(t => t.IsBlocked)</p></div>
-    <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Horas registradas</p><p class="mt-1 text-2xl font-bold text-indigo-600">@((Model.TimeLogs.Sum(x => x.Minutes) / 60m).ToString("0.0"))h</p></div>
+<div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Total</p><p class="mt-0.5 text-xl font-bold">@Model.Tasks.Count</p></div>
+    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Concluídas</p><p class="mt-0.5 text-xl font-bold text-emerald-600">@Model.Tasks.Count(t => t.Status == "done")</p></div>
+    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Bloqueadas</p><p class="mt-0.5 text-xl font-bold text-red-600">@Model.Tasks.Count(t => t.IsBlocked)</p></div>
+    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Horas registradas</p><p class="mt-0.5 text-xl font-bold text-indigo-600">@((Model.TimeLogs.Sum(x => x.Minutes) / 60m).ToString("0.0"))h</p></div>
 </div>
 
-<div id="view-kanban" class="flex min-h-[520px] gap-5 overflow-x-auto pb-4">
+<div id="view-kanban" class="kanban-board flex min-h-0 gap-4 overflow-x-auto overflow-y-hidden pb-3">
     @foreach (var column in Model.Columns)
     {
-        <section class="flex w-80 shrink-0 flex-col rounded-xl border border-slate-200 bg-slate-100/60 p-4">
-            <header class="mb-4 flex items-center justify-between">
+        <section class="flex h-full w-[min(20rem,calc(100vw-2rem))] shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-100/60 p-3 md:w-80">
+            <header class="mb-3 flex shrink-0 items-center justify-between">
                 <h2 class="text-xs font-bold uppercase tracking-wider text-slate-600">@column.Title</h2>
                 <span class="rounded-full bg-white px-2 py-1 text-xs font-bold text-slate-500">@Model.Tasks.Count(t => t.Status == column.Id)</span>
             </header>
-            <div data-column-id="@column.Id" class="kanban-column-body flex min-h-20 flex-1 flex-col gap-3">
+            <div data-column-id="@column.Id" class="kanban-column-body flex min-h-20 flex-1 flex-col gap-3 overflow-y-auto pr-1">
                 @foreach (var task in Model.Tasks.Where(t => t.Status == column.Id).OrderBy(t => t.PositionIndex))
                 {
                     var profile = Model.Profile(task.AssignedTo);
