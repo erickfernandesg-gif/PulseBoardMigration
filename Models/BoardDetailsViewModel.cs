@@ -18,6 +18,8 @@ public class BoardDetailsViewModel
     public List<TaskAssignment> Assignments { get; set; } = [];
     public List<TaskDependency> Dependencies { get; set; } = [];
     public List<TaskFile> Files { get; set; } = [];
+    public List<TaskApprovalStep> ApprovalSteps { get; set; } = [];
+    public List<ApprovalDelegation> ApprovalDelegations { get; set; } = [];
     public bool CanManageBoard => Board.OwnerId == CurrentUserId ||
         Profile(CurrentUserId)?.Role is "admin" or "manager";
 
@@ -26,4 +28,9 @@ public class BoardDetailsViewModel
 
     public ClientAccount? Client(Guid? id) =>
         id.HasValue ? Clients.FirstOrDefault(c => c.Id == id.Value) : null;
+
+    public bool CanDecide(TaskApprovalStep step) =>
+        CanManageBoard || step.ApproverId == CurrentUserId || ApprovalDelegations.Any(delegation =>
+            delegation.DelegatorId == step.ApproverId && delegation.SubstituteId == CurrentUserId && delegation.IsActive &&
+            DateTime.Today >= delegation.StartsOn.Date && DateTime.Today <= delegation.EndsOn.Date);
 }

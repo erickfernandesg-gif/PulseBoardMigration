@@ -34,6 +34,33 @@ dotnet restore
 dotnet run
 ```
 
+## Ambiente de teste no Render
+
+O repositório inclui um `Dockerfile` e um Blueprint `render.yaml`. No Render,
+crie um **Blueprint**, conecte este repositório e informe os três segredos que o
+Blueprint solicitar:
+
+- `Supabase__Url`
+- `Supabase__AnonKey`
+- `Supabase__ServiceRoleKey`
+
+Os nomes usam `__` porque o ASP.NET Core converte essa notação para as chaves
+`Supabase:Url`, `Supabase:AnonKey` e `Supabase:ServiceRoleKey`.
+
+O serviço expõe `/health` para o health check do Render e escuta a porta `10000`
+dentro do container. O plano gratuito hiberna quando fica sem tráfego e usa disco
+efêmero; por isso, usuários autenticados precisarão entrar novamente depois de um
+redeploy ou reinício.
+
+Para conservar os cookies entre reinícios em um plano com disco persistente,
+monte o disco (por exemplo, em `/var/data`) e configure também:
+
+```text
+DataProtection__KeysPath=/var/data/keys
+```
+
+Não exponha `Supabase__ServiceRoleKey` no navegador nem grave seu valor no Git.
+
 ## Módulos
 
 - Autenticação e perfil

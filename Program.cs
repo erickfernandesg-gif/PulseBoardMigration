@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using PulseBoardMigration.Services;
 using PulseBoardMigration.Security;
@@ -10,8 +11,12 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
-var keyDirectory = new DirectoryInfo(
-    Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys"));
+var configuredKeyPath = builder.Configuration["DataProtection:KeysPath"];
+var keyPath = string.IsNullOrWhiteSpace(configuredKeyPath)
+    ? Path.Combine(builder.Environment.ContentRootPath, "App_Data", "keys")
+    : configuredKeyPath;
+Directory.CreateDirectory(keyPath);
+var keyDirectory = new DirectoryInfo(keyPath);
 builder.Services.AddDataProtection()
     .SetApplicationName("PulseBoardMigration")
     .PersistKeysToFileSystem(keyDirectory);
@@ -30,6 +35,15 @@ builder.Services.AddScoped<BoardOperationsService>();
 builder.Services.AddControllersWithViews(options =>
 {
     options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+});
+builder.Services.AddHealthChecks();
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
 });
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -50,6 +64,8 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
@@ -61,6 +77,8 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapHealthChecks("/health");
 
 app.MapControllerRoute(
     name: "default",

@@ -1,6 +1,7 @@
 @model PulseBoardMigration.Models.BoardDetailsViewModel
 @using System.Text.Json
 @{
+    var today = DateTime.Today;
     var scheduledTasks = Model.Tasks
         .Where(task => task.StartDate.HasValue || task.DueDate.HasValue)
         .Select(task =>
@@ -16,6 +17,17 @@
                     : task.EstimatedMinutes > 0
                         ? Math.Clamp((int)Math.Round(task.TotalMinutesSpent * 100m / task.EstimatedMinutes), 0, 95)
                         : task.Status == "in-progress" ? 50 : 0;
+            var isOverdue = task.Status != "done" && end < today;
+            var riskClass = task.IsBlocked
+                ? "gantt-blocked"
+                : isOverdue || task.Priority == "critical"
+                    ? "gantt-critical"
+                    : task.Status == "done"
+                        ? "gantt-done"
+                        : task.Priority == "high" ? "gantt-high" : "gantt-normal";
+            var baselineVariance = task.BaselineEnd.HasValue
+                ? (end - task.BaselineEnd.Value.Date).Days
+                : (int?)null;
 
             return new
             {
@@ -27,56 +39,181 @@
                 dependencies = string.Join(",", Model.Dependencies
                     .Where(dependency => dependency.TaskId == task.Id)
                     .Select(dependency => dependency.DependsOnTaskId.ToString())),
-                custom_class = task.IsBlocked ? "gantt-blocked" : task.Status == "done" ? "gantt-done" : task.Priority switch
-                {
-                    "critical" => "gantt-critical",
-                    "high" => "gantt-high",
-                    _ => "gantt-normal"
-                },
+                custom_class = riskClass,
                 status = task.Status,
+                statusLabel = Model.Columns.FirstOrDefault(column => column.Id == task.Status)?.Title ?? task.Status,
+                priority = task.Priority,
                 assignedTo = task.AssignedTo?.ToString() ?? string.Empty,
                 collaborators = string.Join(",", Model.Collaborators.Where(c => c.TaskId == task.Id).Select(c => c.UserId)),
                 targetMonth = task.TargetMonth ?? string.Empty,
                 responsible = Model.Profile(task.AssignedTo)?.FullName ?? "Sem responsável",
-                isBlocked = task.IsBlocked
+                client = Model.Client(task.ClientId)?.Name ?? "Sem cliente",
+                isBlocked = task.IsBlocked,
+                blockerReason = task.BlockerReason ?? string.Empty,
+                isOverdue,
+                isDone = task.Status == "done",
+                isRisk = task.IsBlocked || isOverdue || task.Priority == "critical",
+                isSubtask = task.ParentTaskId.HasValue,
+                durationDays = Math.Max(1, (end - start).Days + 1),
+                baselineStart = task.BaselineStart?.ToString("yyyy-MM-dd") ?? string.Empty,
+                baselineEnd = task.BaselineEnd?.ToString("yyyy-MM-dd") ?? string.Empty,
+                baselineVariance,
+                estimatedMinutes = task.EstimatedMinutes,
+                spentMinutes = task.TotalMinutesSpent
             };
         })
         .OrderBy(task => task.start)
+        .ThenBy(task => task.name)
         .ToList();
     var unplannedCount = Model.Tasks.Count(task => !task.StartDate.HasValue && !task.DueDate.HasValue);
     var ganttJson = JsonSerializer.Serialize(scheduledTasks);
 }
 
-<div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-    <div class="flex flex-col gap-4 border-b border-slate-100 p-5 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-            <div class="flex flex-wrap items-center gap-2"><h3 class="text-sm font-bold uppercase tracking-wider text-slate-700">Cronograma do projeto</h3><span class="rounded-full bg-indigo-50 px-2 py-1 text-[10px] font-bold text-indigo-700">@scheduledTasks.Count planejadas</span>@if(unplannedCount > 0){<span class="rounded-full bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700">@unplannedCount sem data</span>}</div>
-            <p class="mt-1 text-xs text-slate-500">Arraste uma barra para reagendar. O progresso é calculado pelo status e pelas horas registradas.</p>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-            <button type="button" id="ganttToday" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:border-indigo-300">Hoje</button>
-            <div class="flex rounded-lg bg-slate-100 p-1" id="gantt-modes">
-                <button type="button" data-gantt-mode="Day" class="rounded-md px-2.5 py-1 text-xs font-medium text-slate-600">Dia</button>
-                <button type="button" data-gantt-mode="Week" class="rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-900 shadow-sm">Semana</button>
-                <button type="button" data-gantt-mode="Month" class="rounded-md px-2.5 py-1 text-xs font-medium text-slate-600">Mês</button>
+<section id="ganttWorkspace" class="gantt-workspace overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <header class="border-b border-slate-200 bg-white px-5 py-4">
+        <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="text-sm font-extrabold uppercase tracking-wider text-slate-800">Cronograma do projeto</h3>
+                    <span class="rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-bold text-indigo-700">@scheduledTasks.Count planejadas</span>
+                    @if (unplannedCount > 0)
+                    {
+                        <span class="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-bold text-amber-700">@unplannedCount sem data</span>
+                    }
+                </div>
+                <p class="mt-1 text-xs text-slate-500">Planeje, acompanhe riscos e reagende atividades diretamente na linha do tempo.</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <button type="button" id="ganttToggleList" aria-pressed="true" class="gantt-action-button" title="Mostrar ou ocultar a lista de tarefas">
+                    <i data-lucide="panel-left" class="h-4 w-4"></i><span class="hidden sm:inline">Lista</span>
+                </button>
+                <button type="button" id="ganttToggleDependencies" aria-pressed="true" class="gantt-action-button" title="Mostrar ou ocultar dependências">
+                    <i data-lucide="git-branch" class="h-4 w-4"></i><span class="hidden sm:inline">Dependências</span>
+                </button>
+                <button type="button" id="ganttToday" class="gantt-action-button">
+                    <i data-lucide="calendar-days" class="h-4 w-4"></i>Hoje
+                </button>
+                <button type="button" id="ganttFullscreen" class="gantt-action-button" title="Abrir o cronograma em tela cheia">
+                    <i data-lucide="maximize-2" class="h-4 w-4"></i><span class="hidden sm:inline">Tela cheia</span>
+                </button>
+                <div class="flex rounded-xl bg-slate-100 p-1" id="gantt-modes" aria-label="Escala do cronograma">
+                    <button type="button" data-gantt-mode="Day" class="gantt-mode-button">Dia</button>
+                    <button type="button" data-gantt-mode="Week" class="gantt-mode-button is-active">Semana</button>
+                    <button type="button" data-gantt-mode="Month" class="gantt-mode-button">Mês</button>
+                </div>
             </div>
         </div>
+
+        <div class="mt-4 grid gap-2 lg:grid-cols-[minmax(220px,1fr)_repeat(2,minmax(150px,220px))_auto]">
+            <label class="relative block">
+                <i data-lucide="search" class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"></i>
+                <input id="ganttSearch" type="search" placeholder="Buscar tarefa, responsável ou cliente..." class="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-100" />
+            </label>
+            <select id="ganttStatusFilter" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 outline-none focus:border-indigo-400">
+                <option value="all">Todos os status</option>
+                <option value="open">Somente abertas</option>
+                @foreach (var column in Model.Columns)
+                {
+                    <option value="@column.Id">@column.Title</option>
+                }
+            </select>
+            <select id="ganttSort" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 outline-none focus:border-indigo-400">
+                <option value="start">Ordenar por início</option>
+                <option value="end">Ordenar por prazo</option>
+                <option value="responsible">Ordenar por responsável</option>
+                <option value="name">Ordenar por nome</option>
+            </select>
+            <label class="flex h-10 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 px-3 text-xs font-semibold text-slate-600">
+                <input id="ganttShowSubtasks" type="checkbox" checked class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" /> Subtarefas
+            </label>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-2 border-b border-slate-200 bg-slate-50 sm:grid-cols-4">
+        <button type="button" data-gantt-smart-filter="all" class="gantt-kpi is-active">
+            <span class="gantt-kpi-label">Visíveis</span><strong id="ganttVisibleCount">0</strong>
+        </button>
+        <button type="button" data-gantt-smart-filter="risk" class="gantt-kpi">
+            <span class="gantt-kpi-label text-red-600">Em risco</span><strong id="ganttRiskCount" class="text-red-600">0</strong>
+        </button>
+        <button type="button" data-gantt-smart-filter="overdue" class="gantt-kpi">
+            <span class="gantt-kpi-label text-amber-600">Atrasadas</span><strong id="ganttOverdueCount" class="text-amber-600">0</strong>
+        </button>
+        <button type="button" data-gantt-smart-filter="done" class="gantt-kpi">
+            <span class="gantt-kpi-label text-emerald-600">Concluídas</span><strong id="ganttDoneCount" class="text-emerald-600">0</strong>
+        </button>
     </div>
 
-    <div class="flex flex-wrap gap-4 border-b border-slate-100 px-5 py-3 text-[10px] font-medium text-slate-500"><span class="flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-full bg-indigo-500"></i>Normal</span><span class="flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-full bg-amber-500"></i>Alta</span><span class="flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-full bg-red-500"></i>Crítica/bloqueada</span><span class="flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-full bg-emerald-500"></i>Concluída</span></div>
-
-    <div id="ganttError" role="alert" class="m-5 hidden rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"></div>
-    <div id="ganttEmpty" class="@(scheduledTasks.Count > 0 ? "hidden" : "") m-5 flex min-h-64 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center"><div><p class="font-bold text-slate-600">Nenhuma tarefa planejada</p><p class="mt-1 text-sm text-slate-400">Adicione uma data de início ou prazo nas tarefas para montar o cronograma.</p></div></div>
-    <div id="gantt-scroll" class="@(scheduledTasks.Count == 0 ? "hidden" : "") min-h-[420px] w-full overflow-x-auto bg-slate-50/40 p-3">
-        <svg id="gantt-chart"></svg>
+    <div class="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-slate-200 bg-white px-5 py-2.5 text-[10px] font-semibold text-slate-500">
+        <span class="gantt-legend"><i class="bg-indigo-500"></i>Normal</span>
+        <span class="gantt-legend"><i class="bg-amber-500"></i>Alta prioridade</span>
+        <span class="gantt-legend"><i class="bg-red-500"></i>Crítica, atrasada ou bloqueada</span>
+        <span class="gantt-legend"><i class="bg-emerald-500"></i>Concluída</span>
+        <span class="ml-auto hidden items-center gap-1 text-slate-400 md:flex"><i data-lucide="mouse-pointer-2" class="h-3 w-3"></i>Clique para abrir · arraste para reagendar</span>
     </div>
-</div>
+
+    <div id="ganttError" role="alert" class="m-5 hidden rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"></div>
+    <div id="ganttEmpty" class="@(scheduledTasks.Count > 0 ? "hidden" : "") m-5 flex min-h-64 items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+        <div><i data-lucide="calendar-off" class="mx-auto mb-3 h-8 w-8 text-slate-300"></i><p class="font-bold text-slate-600">Nenhuma tarefa planejada</p><p class="mt-1 text-sm text-slate-400">Adicione uma data de início ou prazo às tarefas para montar o cronograma.</p></div>
+    </div>
+
+    <div id="gantt-stage" class="@(scheduledTasks.Count == 0 ? "hidden" : "") gantt-stage">
+        <aside id="gantt-task-panel" class="gantt-task-panel" aria-label="Lista de tarefas do cronograma">
+            <div class="gantt-task-header"><span>Tarefa / responsável</span><span>Prazo</span></div>
+            <div id="gantt-task-list" class="gantt-task-list"></div>
+        </aside>
+        <div id="gantt-scroll" class="gantt-scroll">
+            <svg id="gantt-chart"></svg>
+        </div>
+    </div>
+    <footer id="ganttFooter" class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-2 text-[10px] text-slate-500">
+        <span id="ganttRangeLabel">Período do cronograma</span>
+        <span>As alterações de datas são salvas automaticamente.</span>
+    </footer>
+</section>
 
 <script id="gantt-data" type="application/json">@Html.Raw(ganttJson)</script>
 
 <style>
+    .gantt-action-button { display: inline-flex; height: 2.5rem; align-items: center; gap: .45rem; border: 1px solid #e2e8f0; border-radius: .75rem; background: #fff; padding: 0 .75rem; color: #475569; font-size: .75rem; font-weight: 700; transition: .15s ease; }
+    .gantt-action-button:hover, .gantt-action-button[aria-pressed="true"] { border-color: #a5b4fc; background: #eef2ff; color: #4f46e5; }
+    .gantt-mode-button { border-radius: .55rem; padding: .4rem .7rem; color: #64748b; font-size: .75rem; font-weight: 700; }
+    .gantt-mode-button.is-active { background: #fff; color: #312e81; box-shadow: 0 1px 3px rgb(15 23 42 / .12); }
+    .gantt-kpi { display: flex; align-items: center; justify-content: space-between; gap: .75rem; border-right: 1px solid #e2e8f0; padding: .75rem 1.25rem; text-align: left; transition: background .15s ease; }
+    .gantt-kpi:hover, .gantt-kpi.is-active { background: #fff; box-shadow: inset 0 -2px #6366f1; }
+    .gantt-kpi-label { font-size: .65rem; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+    .gantt-kpi strong { font-size: 1.05rem; color: #334155; }
+    .gantt-legend { display: inline-flex; align-items: center; gap: .4rem; }
+    .gantt-legend i { display: inline-block; height: .6rem; width: .6rem; border-radius: 9999px; }
+    .gantt-stage { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); height: min(68vh, 680px); min-height: 460px; background: #fff; }
+    .gantt-stage.list-hidden { grid-template-columns: 0 minmax(0, 1fr); }
+    .gantt-task-panel { position: relative; z-index: 3; overflow: hidden; border-right: 1px solid #cbd5e1; background: #fff; transition: width .2s ease, opacity .2s ease; }
+    .gantt-stage.list-hidden .gantt-task-panel { width: 0; opacity: 0; }
+    .gantt-task-header { display: grid; height: 50px; grid-template-columns: minmax(0, 1fr) 76px; align-items: center; gap: .5rem; border-bottom: 1px solid #cbd5e1; background: #f8fafc; padding: 0 .75rem; color: #64748b; font-size: .65rem; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+    .gantt-task-header span:last-child { text-align: right; }
+    .gantt-task-list { will-change: transform; }
+    .gantt-task-row { display: grid; height: 38px; grid-template-columns: minmax(0, 1fr) 76px; align-items: center; gap: .5rem; border-bottom: 1px solid #f1f5f9; padding: 0 .75rem; cursor: pointer; transition: background .12s ease; }
+    .gantt-task-row:nth-child(even) { background: #f8fafc80; }
+    .gantt-task-row:hover, .gantt-task-row.is-highlighted { background: #eef2ff; }
+    .gantt-task-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #334155; font-size: .72rem; font-weight: 700; }
+    .gantt-task-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #94a3b8; font-size: .62rem; }
+    .gantt-task-due { text-align: right; color: #64748b; font-size: .65rem; font-weight: 700; }
+    .gantt-task-due.is-overdue { color: #dc2626; }
+    .gantt-risk-dot { display: inline-block; height: .45rem; width: .45rem; flex: none; border-radius: 9999px; }
+    .gantt-scroll { position: relative; overflow: auto; overscroll-behavior: contain; background: #fff; scrollbar-color: #94a3b8 #f1f5f9; }
     #gantt-scroll .gantt-container { min-width: 100%; }
-    #gantt-chart { min-height: 380px; }
+    #gantt-chart { display: block; min-height: 420px; }
+    .gantt .grid-header { fill: #f8fafc; stroke: #cbd5e1; }
+    .gantt .grid-row { fill: #fff; }
+    .gantt .grid-row:nth-child(even) { fill: #f8fafc; }
+    .gantt .row-line { stroke: #f1f5f9; }
+    .gantt .tick { stroke: #e2e8f0; }
+    .gantt .tick.thick { stroke: #cbd5e1; }
+    .gantt .today-highlight { fill: #fef3c7; opacity: .65; }
+    .gantt .arrow { stroke: #64748b; stroke-width: 1.4; }
+    .gantt-workspace.dependencies-hidden .gantt .arrow { display: none; }
+    .gantt .bar { rx: 6; ry: 6; filter: drop-shadow(0 2px 2px rgb(15 23 42 / .12)); }
+    .gantt .bar-progress { rx: 6; ry: 6; }
     .gantt .bar-wrapper.gantt-critical .bar, .gantt .bar-wrapper.gantt-blocked .bar { fill: #ef4444; }
     .gantt .bar-wrapper.gantt-critical .bar-progress, .gantt .bar-wrapper.gantt-blocked .bar-progress { fill: #b91c1c; }
     .gantt .bar-wrapper.gantt-high .bar { fill: #f59e0b; }
@@ -86,5 +223,16 @@
     .gantt .bar-wrapper.gantt-done .bar { fill: #10b981; }
     .gantt .bar-wrapper.gantt-done .bar-progress { fill: #047857; }
     .gantt .handle.progress { display: none; }
-    .gantt .bar-label { fill: #fff; font-weight: 600; }
+    .gantt .bar-label { fill: #fff; font-size: 11px; font-weight: 700; pointer-events: none; }
+    .gantt-popup-wrapper { z-index: 30; border: 0 !important; border-radius: .75rem !important; box-shadow: 0 14px 35px rgb(15 23 42 / .2) !important; }
+    .gantt-popup-card { min-width: 260px; max-width: 340px; padding: .85rem; color: #475569; font-size: .72rem; }
+    .gantt-popup-progress { height: .35rem; overflow: hidden; border-radius: 9999px; background: #e2e8f0; }
+    .gantt-popup-progress > i { display: block; height: 100%; border-radius: inherit; background: #6366f1; }
+    .gantt-workspace:fullscreen { height: 100vh; border: 0; border-radius: 0; }
+    .gantt-workspace:fullscreen .gantt-stage { height: calc(100vh - 259px); max-height: none; }
+    @@media (max-width: 767px) {
+        .gantt-stage { grid-template-columns: 0 minmax(0, 1fr); min-height: 430px; }
+        .gantt-task-panel { width: 0; opacity: 0; }
+        .gantt-kpi { padding: .65rem .8rem; }
+    }
 </style>

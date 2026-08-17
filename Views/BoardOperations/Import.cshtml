@@ -1,5 +1,34 @@
 @model PulseBoardMigration.Models.BoardImportPreviewViewModel
-@{ViewData["Title"]="Importação assistida";}
-<div class="mx-auto max-w-5xl"><a asp-action="Index" asp-route-id="@Model.BoardId" class="text-sm font-bold text-indigo-600">← Central de operações</a><h1 class="mt-3 text-2xl font-bold">Importar Monday ou Excel</h1><p class="text-sm text-slate-500">Envie a exportação do Monday ou uma planilha comum. Nada é gravado antes da confirmação do mapeamento.</p>
-@if(!Model.Rows.Any()){<form asp-action="PreviewImport" method="post" enctype="multipart/form-data" class="mt-6 space-y-4 rounded-2xl border bg-white p-6"><input type="hidden" name="boardId" value="@Model.BoardId"/><div><label class="label">Origem</label><select name="source" class="field"><option value="monday">Exportação do Monday</option><option value="excel">Excel / CSV</option></select></div><div><label class="label">Arquivo .xlsx ou .csv (até 10 MB)</label><input name="file" type="file" accept=".xlsx,.csv" required class="field"/></div><button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white">Analisar arquivo</button></form>}
-else{<form asp-action="CommitImport" method="post" class="mt-6 rounded-2xl border bg-white p-6"><input type="hidden" name="boardId" value="@Model.BoardId"/><textarea name="payload" class="hidden">@Model.Payload</textarea><h2 class="font-bold">Mapeie as colunas</h2><div class="mt-3 grid gap-3 md:grid-cols-3">@foreach(var map in new[]{("titleColumn","Título",true),("descriptionColumn","Descrição",false),("statusColumn","Status",false),("priorityColumn","Prioridade",false),("dueDateColumn","Prazo",false)}){<div><label class="label">@map.Item2</label><select name="@map.Item1" required="@map.Item3" class="field"><option value="">Não importar</option>@foreach(var h in Model.Headers){<option value="@h">@h</option>}</select></div>}</div><div class="mt-5 max-h-80 overflow-auto rounded-xl border"><table class="w-full text-xs"><thead><tr>@foreach(var h in Model.Headers){<th class="whitespace-nowrap border-b bg-slate-50 p-2 text-left">@h</th>}</tr></thead><tbody>@foreach(var row in Model.Rows.Take(20)){<tr>@foreach(var h in Model.Headers){<td class="max-w-64 truncate border-b p-2">@(row.TryGetValue(h,out var v)?v:"")</td>}</tr>}</tbody></table></div><button class="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white">Confirmar importação de @Model.Rows.Count tarefa(s)</button></form>}</div>
+@{ ViewData["Title"] = "Importação assistida"; }
+<div class="mx-auto max-w-5xl">
+    <a asp-action="Index" asp-route-id="@Model.BoardId" class="text-sm font-bold text-indigo-600">← Central de operações</a>
+    <h1 class="mt-3 text-2xl font-bold">Importar Monday ou Excel</h1>
+    <p class="text-sm text-slate-500">Envie a exportação do Monday ou uma planilha comum. Nada é gravado antes da confirmação do mapeamento.</p>
+    @if (!Model.Rows.Any())
+    {
+        <form asp-action="PreviewImport" method="post" enctype="multipart/form-data" class="mt-6 space-y-4 rounded-2xl border bg-white p-6">
+            <input type="hidden" name="boardId" value="@Model.BoardId"/>
+            <div><label class="label">Origem</label><select name="source" class="field"><option value="monday">Exportação do Monday</option><option value="excel">Excel / CSV</option></select></div>
+            <div><label class="label">Arquivo .xlsx ou .csv (até 10 MB)</label><input name="file" type="file" accept=".xlsx,.csv" required class="field"/></div>
+            <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white">Analisar arquivo</button>
+        </form>
+    }
+    else
+    {
+        <form asp-action="CommitImport" method="post" class="mt-6 rounded-2xl border bg-white p-6">
+            <input type="hidden" name="boardId" value="@Model.BoardId"/>
+            <input type="hidden" name="source" value="@Model.Source"/>
+            <textarea name="payload" class="hidden">@Model.Payload</textarea>
+            <h2 class="font-bold">Mapeie as colunas</h2>
+            <p class="mt-1 text-xs text-slate-500">Os status serão associados às etapas existentes do Board. Valores desconhecidos irão para a primeira etapa.</p>
+            <div class="mt-3 grid gap-3 md:grid-cols-3">
+                @foreach (var map in new[] { ("titleColumn", "Título", true), ("descriptionColumn", "Descrição", false), ("statusColumn", "Status", false), ("priorityColumn", "Prioridade", false), ("dueDateColumn", "Prazo", false) })
+                {
+                    <div><label class="label">@map.Item2</label><select name="@map.Item1" required="@map.Item3" class="field"><option value="">Não importar</option>@foreach (var header in Model.Headers) { <option value="@header">@header</option> }</select></div>
+                }
+            </div>
+            <div class="mt-5 max-h-80 overflow-auto rounded-xl border"><table class="w-full text-xs"><thead><tr>@foreach (var header in Model.Headers) { <th class="whitespace-nowrap border-b bg-slate-50 p-2 text-left">@header</th> }</tr></thead><tbody>@foreach (var row in Model.Rows.Take(20)) { <tr>@foreach (var header in Model.Headers) { <td class="max-w-64 truncate border-b p-2">@(row.TryGetValue(header, out var value) ? value : "")</td> }</tr> }</tbody></table></div>
+            <button class="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white">Confirmar importação de @Model.Rows.Count tarefa(s)</button>
+        </form>
+    }
+</div>

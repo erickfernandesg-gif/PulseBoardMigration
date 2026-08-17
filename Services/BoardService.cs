@@ -119,6 +119,8 @@ public class BoardService
         var assignments = await client.From<TaskAssignment>().Get();
         var dependencies = await client.From<TaskDependency>().Get();
         var files = await client.From<TaskFile>().Get();
+        var approvalSteps = await client.From<TaskApprovalStep>().Get();
+        var approvalDelegations = await client.From<ApprovalDelegation>().Get();
 
         var settings = board.Settings?.Count > 0
             ? board.Settings
@@ -146,8 +148,14 @@ public class BoardService
             ,Assignments = assignments.Models.Where(x => taskIds.Contains(x.TaskId)).ToList()
             ,Dependencies = dependencies.Models.Where(x => taskIds.Contains(x.TaskId)).ToList()
             ,Files = files.Models.Where(x => taskIds.Contains(x.TaskId)).OrderByDescending(x => x.CreatedAt).ToList()
+            ,ApprovalSteps = approvalSteps.Models.Where(x => taskIds.Contains(x.TaskId)).OrderBy(x => x.Sequence).ToList()
+            ,ApprovalDelegations = approvalDelegations.Models.ToList()
         };
     }
+
+    public async Task DecideApprovalAsync(Guid stepId, string decision, string? note) =>
+        await (await _clientFactory.CreateForCurrentUserAsync()).Rpc("decide_task_approval",
+            new { p_step_id = stepId, p_decision = decision, p_note = note });
 
     public async Task<bool> UpdateBoardAsync(
         Guid boardId,

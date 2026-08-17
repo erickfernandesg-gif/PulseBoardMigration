@@ -82,7 +82,16 @@ public class BoardOperationsViewModel
     public List<TaskApprovalStep> ApprovalSteps { get; set; } = [];
     public List<ApprovalDelegation> Delegations { get; set; } = [];
     public List<TaskFieldMirror> Mirrors { get; set; } = [];
+    public List<TaskDependency> CrossDependencies { get; set; } = [];
     public List<TaskFieldHistory> FieldHistory { get; set; } = [];
+}
+
+public class AutomationEditorViewModel
+{
+    public Guid? BoardId { get; set; }
+    public Board? Board { get; set; }
+    public List<AutomationRule> Rules { get; set; } = [];
+    public List<Profile> Profiles { get; set; } = [];
 }
 
 public class IntakePublicViewModel

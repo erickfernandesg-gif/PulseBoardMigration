@@ -54,6 +54,14 @@ public class BoardsController : Controller
     }
 
     [HttpPost]
+    public async Task<IActionResult> DecideApproval(Guid boardId, Guid stepId, string decision, string? note)
+    {
+        try { await _boardService.DecideApprovalAsync(stepId, decision, note); TempData["Success"] = "Decisão de aprovação registrada."; }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
+        return RedirectToAction(nameof(Details), new { id = boardId });
+    }
+
+    [HttpPost]
     public async Task<IActionResult> UpdateBoard(
         Guid boardId,
         string name,

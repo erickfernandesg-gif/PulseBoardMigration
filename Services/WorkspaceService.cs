@@ -88,17 +88,62 @@ public class WorkspaceService
         return response.Models.Count > 0;
     }
 
-    public async Task<List<AutomationRule>> GetAutomationsAsync()
+    public async Task<List<AutomationRule>> GetAutomationsAsync(Guid? boardId = null)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
-        var response = await client.From<AutomationRule>().Get();
+        var response = boardId.HasValue
+            ? await client.From<AutomationRule>().Where(a => a.BoardId == boardId.Value).Get()
+            : await client.From<AutomationRule>().Get();
         return response.Models.OrderByDescending(a => a.CreatedAt).ToList();
+    }
+
+    public async Task<AutomationEditorViewModel> GetAutomationEditorAsync(Guid? boardId)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var board = boardId.HasValue ? await client.From<Board>().Where(x => x.Id == boardId.Value).Single() : null;
+        if (boardId.HasValue && board == null) throw new InvalidOperationException("Board não encontrado ou sem permissão.");
+        var profiles = await client.From<Profile>().Where(x => x.IsActive == true).Get();
+        return new AutomationEditorViewModel
+        {
+            BoardId = boardId,
+            Board = board,
+            Rules = await GetAutomationsAsync(boardId),
+            Profiles = profiles.Models.OrderBy(x => x.FullName ?? x.Email).ToList()
+        };
     }
 
     public async Task<AutomationRule?> SaveAutomationAsync(AutomationRule rule)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
-        rule.Title = rule.Title.Trim();
+        rule.Title = rule.Title?.Trim() ?? string.Empty;
+        if (rule.Title.Length is < 1 or > 200) throw new InvalidOperationException("Informe um nome válido para a automação.");
+        var triggerTypes = new[] { "status_change", "priority_change", "assignment_change" };
+        var actionTypes = new[] { "notify_manager", "assign_user", "move_status", "set_priority", "set_due_days" };
+        if (!triggerTypes.Contains(rule.TriggerType)) throw new InvalidOperationException("Gatilho de automação inválido.");
+        if (rule.ActionType == "assign_auto") rule.ActionType = "assign_user";
+        if (!actionTypes.Contains(rule.ActionType)) throw new InvalidOperationException("Ação de automação inválida.");
+
+        Board? board = null;
+        if (rule.BoardId.HasValue)
+        {
+            board = await client.From<Board>().Where(x => x.Id == rule.BoardId.Value).Single()
+                ?? throw new InvalidOperationException("Board não encontrado ou sem permissão.");
+        }
+        if (rule.TriggerType == "status_change" && board != null && board.Settings.All(x => x.Id != rule.TriggerValue))
+            throw new InvalidOperationException("A etapa usada no gatilho não existe neste Board.");
+        if (rule.ActionType == "move_status" && (board == null || board.Settings.All(x => x.Id != rule.ActionPayload)))
+            throw new InvalidOperationException("Selecione uma etapa válida para a ação.");
+        if (rule.ActionType == "set_priority" && rule.ActionPayload is not ("low" or "medium" or "high" or "critical"))
+            throw new InvalidOperationException("Prioridade da automação inválida.");
+        if (rule.ActionType == "set_due_days" && (!int.TryParse(rule.ActionPayload, out var days) || days is < 0 or > 3650))
+            throw new InvalidOperationException("O prazo deve ser informado em dias, entre 0 e 3650.");
+        if (rule.ActionType == "assign_user")
+        {
+            if (!Guid.TryParse(rule.ActionPayload, out var assignedId)) throw new InvalidOperationException("Selecione um usuário válido.");
+            var assigned = await client.From<Profile>().Where(x => x.Id == assignedId).Single();
+            if (assigned is not { IsActive: true }) throw new InvalidOperationException("O usuário da automação não está ativo.");
+        }
+        if (rule.ActionType == "notify_manager") rule.ActionPayload = null;
         if (rule.Id == Guid.Empty)
         {
             rule.CreatedAt = DateTime.UtcNow;

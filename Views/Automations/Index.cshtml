@@ -1,27 +1,75 @@
-@model List<PulseBoardMigration.Models.AutomationRule>
-@{ ViewData["Title"] = "Automações"; }
-<div class="mb-8"><h1 class="text-2xl font-bold">Automações</h1><p class="text-sm text-slate-500">Regras SE/ENTÃO executadas quando o status muda.</p></div>
+@model PulseBoardMigration.Models.AutomationEditorViewModel
+@{
+    ViewData["Title"] = "Automações";
+    var statuses = Model.Board?.Settings ?? [];
+}
+<div class="mb-8 flex flex-wrap items-end justify-between gap-3">
+    <div>
+        @if (Model.Board != null)
+        {
+            <a asp-controller="BoardOperations" asp-action="Index" asp-route-id="@Model.Board.Id" class="text-sm font-bold text-indigo-600">← Central de operações</a>
+        }
+        <h1 class="mt-2 text-2xl font-bold">Automações</h1>
+        <p class="text-sm text-slate-500">Regras SE/ENTÃO @(Model.Board == null ? "globais" : $"do Board {Model.Board.Name}").</p>
+    </div>
+</div>
 <div class="grid gap-6 lg:grid-cols-3">
     <form asp-action="Save" method="post" class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
         <h2 class="text-lg font-bold">Nova regra</h2>
-        <input type="hidden" name="BoardId" value="@ViewBag.BoardId" />
-        <div><label class="label">Nome</label><input name="Title" required class="field" /></div>
-        <div><label class="label">Quando a tarefa chegar em</label><select name="TriggerValue" class="field"><option value="todo">A fazer</option><option value="in-progress">Em execução</option><option value="homologation">Homologação</option><option value="done">Concluído</option></select></div>
-        <input type="hidden" name="TriggerType" value="status_change" />
-        <div><label class="label">Executar</label><select name="ActionType" class="field"><option value="notify_manager">Notificar gestor</option><option value="assign_user">Atribuir usuário</option><option value="move_status">Mover para etapa</option><option value="set_priority">Alterar prioridade</option><option value="set_due_days">Definir prazo em dias</option></select></div>
-        <div><label class="label">Parâmetro da ação</label><input name="ActionPayload" class="field" placeholder="UUID ou e-mail" /></div>
+        <input type="hidden" name="BoardId" value="@Model.BoardId" />
+        <div><label class="label">Nome</label><input name="Title" required maxlength="200" class="field" /></div>
+        <div>
+            <label class="label">Quando</label>
+            <select id="automationTrigger" name="TriggerType" class="field">
+                <option value="status_change">Status mudar</option>
+                <option value="priority_change">Prioridade mudar</option>
+                <option value="assignment_change">Responsável mudar</option>
+            </select>
+        </div>
+        <div><label class="label">Valor do gatilho</label><input name="TriggerValue" required list="statusValues" class="field" placeholder="Etapa ou valor esperado" /></div>
+        <div>
+            <label class="label">Executar</label>
+            <select id="automationAction" name="ActionType" class="field">
+                <option value="notify_manager">Notificar gestor</option>
+                <option value="assign_user">Atribuir usuário</option>
+                <option value="move_status">Mover para etapa</option>
+                <option value="set_priority">Alterar prioridade</option>
+                <option value="set_due_days">Definir prazo em dias</option>
+            </select>
+        </div>
+        <div id="automationPayloadGroup"><label class="label">Parâmetro da ação</label><input name="ActionPayload" list="automationValues" class="field" placeholder="Etapa, prioridade, dias ou UUID" /><p class="mt-1 text-[10px] text-slate-400">Para atribuição, selecione o UUID de um usuário ativo.</p></div>
         <input type="hidden" name="IsActive" value="true" />
         <button class="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-bold text-white">Criar automação</button>
     </form>
     <section class="space-y-3 lg:col-span-2">
-        @if (!Model.Any()){<div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-400">Nenhuma automação configurada.</div>}
-        @foreach(var rule in Model)
+        @if (!Model.Rules.Any())
         {
-            <article data-searchable class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center">
-                <div class="flex-1"><div class="flex items-center gap-2"><h3 class="font-bold">@rule.Title</h3><span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase @(rule.IsActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")">@(rule.IsActive ? "Ativa" : "Pausada")</span></div><p class="mt-2 text-sm text-slate-500">Se status = <strong>@rule.TriggerValue</strong>, então <strong>@rule.ActionType</strong> @rule.ActionPayload</p></div>
-                <form asp-action="Toggle" method="post"><input type="hidden" name="id" value="@rule.Id"/><input type="hidden" name="active" value="@(!rule.IsActive)"/><button class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">@(rule.IsActive ? "Pausar" : "Ativar")</button></form>
-                <form asp-action="Delete" method="post" onsubmit="return confirm('Excluir automação?')"><input type="hidden" name="id" value="@rule.Id"/><button class="rounded-lg px-3 py-2 text-xs font-bold text-red-600">Excluir</button></form>
+            <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-400">Nenhuma automação configurada para este escopo.</div>
+        }
+        @foreach (var rule in Model.Rules)
+        {
+            <article class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center">
+                <div class="flex-1"><div class="flex items-center gap-2"><h3 class="font-bold">@rule.Title</h3><span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase @(rule.IsActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")">@(rule.IsActive ? "Ativa" : "Pausada")</span></div><p class="mt-2 text-sm text-slate-500">@rule.TriggerType = <strong>@rule.TriggerValue</strong> → <strong>@rule.ActionType</strong> @rule.ActionPayload</p></div>
+                <form asp-action="Toggle" method="post"><input type="hidden" name="id" value="@rule.Id"/><input type="hidden" name="active" value="@(!rule.IsActive)"/><input type="hidden" name="boardId" value="@Model.BoardId"/><button class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">@(rule.IsActive ? "Pausar" : "Ativar")</button></form>
+                <form asp-action="Delete" method="post" onsubmit="return confirm('Excluir automação?')"><input type="hidden" name="id" value="@rule.Id"/><input type="hidden" name="boardId" value="@Model.BoardId"/><button class="rounded-lg px-3 py-2 text-xs font-bold text-red-600">Excluir</button></form>
             </article>
         }
     </section>
 </div>
+<datalist id="statusValues">
+    @foreach (var status in statuses) { <option value="@status.Id">@status.Title</option> }
+    <option value="low">Prioridade baixa</option><option value="medium">Prioridade média</option><option value="high">Prioridade alta</option><option value="critical">Prioridade crítica</option>
+</datalist>
+<datalist id="automationValues">
+    @foreach (var status in statuses) { <option value="@status.Id">Etapa: @status.Title</option> }
+    @foreach (var profile in Model.Profiles) { <option value="@profile.Id">Usuário: @(profile.FullName ?? profile.Email)</option> }
+    <option value="low">Prioridade baixa</option><option value="medium">Prioridade média</option><option value="high">Prioridade alta</option><option value="critical">Prioridade crítica</option>
+</datalist>
+@section Scripts {
+    <script>
+        const action = document.getElementById('automationAction');
+        const payload = document.getElementById('automationPayloadGroup');
+        const syncPayload = () => payload?.classList.toggle('hidden', action?.value === 'notify_manager');
+        action?.addEventListener('change', syncPayload); syncPayload();
+    </script>
+}

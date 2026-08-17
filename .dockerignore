@@ -1,0 +1,12 @@
+.git
+.github
+.vs
+.vscode
+**/bin
+**/obj
+App_Data
+PulseBoardMigration.Tests
+*.user
+*.suo
+Dockerfile*
+README.md
