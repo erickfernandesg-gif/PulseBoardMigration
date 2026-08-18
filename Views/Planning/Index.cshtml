@@ -1,37 +1,88 @@
 @model PulseBoardMigration.Models.EnterprisePlanningViewModel
-@{ ViewData["Title"] = "Planejamento avançado"; }
-<div class="mb-7"><h1 class="text-3xl font-bold">Planejamento avançado</h1><p class="mt-1 text-sm text-slate-500">Capacidade real, baselines, portfólio, modelos e tarefas recorrentes.</p></div>
+@{
+    ViewData["Title"] = "Planejamento";
+}
 
-<div class="grid gap-6 xl:grid-cols-2">
-    <section class="rounded-2xl border bg-white p-5"><h2 class="mb-4 text-lg font-bold">Disponibilidade da equipe</h2>
-        <form asp-action="AddAbsence" method="post" class="grid gap-2 sm:grid-cols-2">
-            <select name="userId" required class="field"><option value="">Pessoa</option>@foreach(var p in Model.Profiles){<option value="@p.Id">@(p.FullName??p.Email)</option>}</select>
-            <select name="type" class="field"><option value="vacation">Férias</option><option value="leave">Afastamento</option><option value="training">Treinamento</option><option value="day_off">Folga</option><option value="other">Outro</option></select>
-            <input type="date" name="startsOn" required class="field"/><input type="date" name="endsOn" required class="field"/>
-            <input name="notes" class="field sm:col-span-2" placeholder="Observação"/><button class="rounded-lg bg-indigo-600 py-2 text-sm font-bold text-white sm:col-span-2">Registrar ausência</button>
+<header class="mb-5 rounded-2xl bg-slate-900 p-5 text-white sm:p-7">
+    <div class="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+        <div class="max-w-2xl">
+            <p class="text-xs font-bold uppercase tracking-widest text-indigo-300">Central de decisões</p>
+            <h1 class="mt-1 text-3xl font-bold">Planejamento</h1>
+            <p class="mt-2 text-sm text-slate-300">Veja o que precisa de atenção, organize a capacidade da equipe e mantenha os projetos dentro do combinado.</p>
+        </div>
+        <form method="get" class="grid gap-2 rounded-xl bg-white/10 p-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Filtros do planejamento">
+            <label class="text-xs text-slate-300"><span class="mb-1 block">Equipe</span><select name="teamId" class="field text-slate-900"><option value="">@(Model.IsAdmin ? "Todas as equipes" : "Minha equipe")</option>@foreach (var team in Model.Teams) { <option value="@team.Id" selected="@(Model.SelectedTeamId == team.Id)">@team.Name</option> }</select></label>
+            <label class="text-xs text-slate-300"><span class="mb-1 block">Projeto</span><select name="boardId" class="field text-slate-900"><option value="">Todos os projetos</option>@foreach (var board in Model.Boards) { <option value="@board.Id" selected="@(Model.SelectedBoardId == board.Id)">@board.Name</option> }</select></label>
+            <label class="text-xs text-slate-300"><span class="mb-1 block">De</span><input type="date" name="from" value="@Model.PeriodStart.ToString("yyyy-MM-dd")" class="field text-slate-900" /></label>
+            <label class="text-xs text-slate-300"><span class="mb-1 block">Até</span><input type="date" name="to" value="@Model.PeriodEnd.ToString("yyyy-MM-dd")" class="field text-slate-900" /></label>
+            <button class="self-end rounded-lg bg-indigo-500 px-4 py-2.5 text-sm font-bold hover:bg-indigo-400">Aplicar filtros</button>
         </form>
-        <div class="mt-4 space-y-2">@foreach(var item in Model.Absences.Take(8)){<div class="rounded-lg bg-slate-50 p-3 text-sm"><strong>@(Model.Person(item.UserId)?.FullName??"Pessoa")</strong><span class="float-right text-xs text-slate-500">@item.StartsOn.ToString("dd/MM")–@item.EndsOn.ToString("dd/MM")</span><p class="text-xs text-slate-400">@item.AbsenceType · @item.Notes</p></div>}</div>
-    </section>
-    <section class="rounded-2xl border bg-white p-5"><h2 class="mb-4 text-lg font-bold">Feriados</h2>
-        <form asp-action="AddHoliday" method="post" class="grid gap-2 sm:grid-cols-2"><input type="date" name="date" required class="field"/><input name="name" required class="field" placeholder="Nome"/><select name="teamId" class="field"><option value="">Toda a empresa</option>@foreach(var t in Model.Teams){<option value="@t.Id">@t.Name</option>}</select><button class="rounded-lg bg-slate-900 text-sm font-bold text-white">Adicionar</button></form>
-        <div class="mt-4 flex flex-wrap gap-2">@foreach(var item in Model.Holidays.Take(15)){<span class="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold">@item.HolidayDate.ToString("dd/MM") · @item.Name</span>}</div>
-    </section>
+    </div>
+</header>
 
-    <section class="rounded-2xl border bg-white p-5"><h2 class="mb-4 text-lg font-bold">Baseline de projeto</h2>
-        <form asp-action="CaptureBaseline" method="post" class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><select name="boardId" required class="field"><option value="">Projeto</option>@foreach(var b in Model.Boards){<option value="@b.Id">@b.Name</option>}</select><input name="name" class="field" placeholder="Nome da versão"/><button class="rounded-lg bg-indigo-600 px-4 text-sm font-bold text-white">Capturar</button></form>
-        <div class="mt-4 space-y-2">@foreach(var item in Model.Baselines.Take(8)){<div class="rounded-lg bg-slate-50 p-3 text-sm"><strong>@Model.Board(item.BoardId)?.Name</strong><span class="float-right text-xs">v@item.Version</span><p class="text-xs text-slate-400">@item.Name · @item.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</p></div>}</div>
-    </section>
-    <section class="rounded-2xl border bg-white p-5"><h2 class="mb-4 text-lg font-bold">Dependências entre projetos</h2>
-        <form asp-action="AddDependency" method="post" class="grid gap-2 sm:grid-cols-2"><select name="predecessor" required class="field"><option value="">Projeto predecessor</option>@foreach(var b in Model.Boards){<option value="@b.Id">@b.Name</option>}</select><select name="successor" required class="field"><option value="">Projeto dependente</option>@foreach(var b in Model.Boards){<option value="@b.Id">@b.Name</option>}</select><select name="type" class="field"><option value="finish_to_start">Fim → início</option><option value="start_to_start">Início → início</option><option value="finish_to_finish">Fim → fim</option></select><div class="flex gap-2"><input type="number" name="lagDays" value="0" class="field" title="Defasagem em dias"/><button class="rounded-lg bg-slate-900 px-4 text-sm font-bold text-white">Adicionar</button></div></form>
-        <div class="mt-4 space-y-2">@foreach(var d in Model.PortfolioDependencies.Take(8)){<div class="rounded-lg bg-slate-50 p-3 text-sm"><strong>@Model.Board(d.PredecessorBoardId)?.Name</strong> → <strong>@Model.Board(d.SuccessorBoardId)?.Name</strong><span class="float-right text-xs text-slate-400">@d.LagDays dias</span></div>}</div>
-    </section>
+<section class="mb-5 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 sm:p-5">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div><h2 class="font-bold text-indigo-950">Como usar esta área</h2><p class="mt-1 text-sm text-indigo-700">Siga esta ordem: entenda os alertas, confira a equipe, ajuste os prazos e automatize o trabalho repetitivo.</p></div>
+        <div class="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4"><span class="rounded-lg bg-white px-3 py-2 font-semibold text-indigo-800">1. Ver alertas</span><span class="rounded-lg bg-white px-3 py-2 font-semibold text-indigo-800">2. Conferir equipe</span><span class="rounded-lg bg-white px-3 py-2 font-semibold text-indigo-800">3. Ajustar prazos</span><span class="rounded-lg bg-white px-3 py-2 font-semibold text-indigo-800">4. Automatizar</span></div>
+    </div>
+</section>
 
-    <section class="rounded-2xl border bg-white p-5"><h2 class="mb-4 text-lg font-bold">Modelos de tarefa</h2>
-        <form asp-action="SaveTemplate" method="post" class="grid gap-2 sm:grid-cols-2"><input name="name" required class="field" placeholder="Nome do modelo"/><select name="boardId" class="field"><option value="">Todos os projetos</option>@foreach(var b in Model.Boards){<option value="@b.Id">@b.Name</option>}</select><input name="description" class="field sm:col-span-2" placeholder="Descrição padrão"/><input type="number" name="estimatedMinutes" min="0" class="field" placeholder="Estimativa em minutos"/><select name="priority" class="field"><option value="medium">Média</option><option value="high">Alta</option><option value="critical">Crítica</option></select><button class="rounded-lg bg-indigo-600 py-2 text-sm font-bold text-white sm:col-span-2">Salvar modelo</button></form>
-        <div class="mt-4 flex flex-wrap gap-2">@foreach(var item in Model.Templates.Take(12)){<span class="rounded-full border px-3 py-1.5 text-xs font-bold">@item.Name</span>}</div>
-    </section>
-    <section class="rounded-2xl border bg-white p-5"><h2 class="mb-4 text-lg font-bold">Tarefas recorrentes</h2>
-        <form asp-action="SaveRecurring" method="post" class="grid gap-2 sm:grid-cols-2"><select name="boardId" required class="field"><option value="">Projeto</option>@foreach(var b in Model.Boards){<option value="@b.Id">@b.Name</option>}</select><input name="title" required class="field" placeholder="Título"/><select name="cadence" class="field"><option value="daily">Diária</option><option value="weekly">Semanal</option><option value="monthly">Mensal</option></select><input type="number" name="intervalCount" min="1" value="1" class="field"/><input type="datetime-local" name="nextRunAt" required class="field"/><select name="assignedTo" class="field"><option value="">Sem responsável</option>@foreach(var p in Model.Profiles){<option value="@p.Id">@(p.FullName??p.Email)</option>}</select><input type="number" name="estimatedMinutes" min="0" class="field" placeholder="Estimativa (min)"/><input type="number" name="dueAfterDays" min="0" value="0" class="field" placeholder="Prazo após criação"/><textarea name="description" class="field sm:col-span-2" placeholder="Descrição"></textarea><button class="rounded-lg bg-slate-900 py-2 text-sm font-bold text-white sm:col-span-2">Programar recorrência</button></form>
-        <div class="mt-4 space-y-2">@foreach(var item in Model.RecurringRules.Take(10)){<div class="rounded-lg bg-slate-50 p-3 text-sm"><strong>@item.Title</strong><span class="float-right text-xs">@item.Cadence</span><p class="text-xs text-slate-400">Próxima: @item.NextRunAt.ToLocalTime().ToString("dd/MM HH:mm")</p></div>}</div>
-    </section>
-</div>
+<nav class="mb-5 overflow-x-auto rounded-xl border bg-white p-1" aria-label="Áreas do planejamento" role="tablist">
+    <div class="flex min-w-max gap-1">
+        <button type="button" class="planning-tab rounded-lg px-4 py-2.5 text-sm font-bold" data-planning-tab="visao-geral" role="tab">Visão geral</button>
+        <button type="button" class="planning-tab rounded-lg px-4 py-2.5 text-sm font-bold" data-planning-tab="equipe" role="tab">Equipe e capacidade</button>
+        <button type="button" class="planning-tab rounded-lg px-4 py-2.5 text-sm font-bold" data-planning-tab="prazos" role="tab">Prazos e vínculos</button>
+        <button type="button" class="planning-tab rounded-lg px-4 py-2.5 text-sm font-bold" data-planning-tab="automacoes" role="tab">Modelos e automações</button>
+    </div>
+</nav>
+
+<partial name="_Overview" model="Model" />
+<partial name="_TeamCapacity" model="Model" />
+<partial name="_Deadlines" model="Model" />
+<partial name="_Automations" model="Model" />
+
+@section Scripts {
+<script>
+(() => {
+    const tabs = [...document.querySelectorAll('[data-planning-tab]')];
+    const panels = [...document.querySelectorAll('.planning-panel')];
+    const activate = (name, updateHash = true) => {
+        if (!panels.some(panel => panel.id === name)) name = 'visao-geral';
+        panels.forEach(panel => panel.hidden = panel.id !== name);
+        tabs.forEach(tab => {
+            const active = tab.dataset.planningTab === name;
+            tab.classList.toggle('bg-slate-900', active); tab.classList.toggle('text-white', active);
+            tab.classList.toggle('text-slate-600', !active); tab.setAttribute('aria-selected', active);
+        });
+        sessionStorage.setItem('planning-active-tab', name);
+        if (updateHash) history.replaceState(null, '', `#${name}`);
+    };
+    tabs.forEach(tab => tab.addEventListener('click', () => activate(tab.dataset.planningTab)));
+    document.querySelectorAll('.planning-jump').forEach(link => link.addEventListener('click', () => activate(link.hash.slice(1))));
+    activate(location.hash.slice(1) || sessionStorage.getItem('planning-active-tab') || 'visao-geral', false);
+
+    const board = document.getElementById('RecurringBoard');
+    const status = document.getElementById('RecurringStatus');
+    const template = document.getElementById('RecurringTemplate');
+    const refreshStatuses = () => {
+        if (!status) return;
+        let columns = []; try { columns = JSON.parse(board?.selectedOptions[0]?.dataset.columns || '[]'); } catch { }
+        status.replaceChildren(...columns.map(column => { const option = document.createElement('option'); option.value = column.id; option.textContent = column.title; return option; }));
+        status.disabled = columns.length === 0;
+    };
+    board?.addEventListener('change', () => {
+        refreshStatuses();
+        [...template.options].forEach(option => option.hidden = Boolean(option.dataset.boardId) && option.dataset.boardId !== board.value);
+        if (template.selectedOptions[0]?.hidden) template.value = '';
+    });
+    template?.addEventListener('change', () => {
+        const option = template.selectedOptions[0]; if (!option?.value) return;
+        document.getElementById('RecurringTitle').value = option.dataset.name || '';
+        document.getElementById('RecurringDescription').value = option.dataset.description || '';
+        document.getElementById('RecurringPriority').value = option.dataset.priority || 'medium';
+        document.getElementById('RecurringEstimatedMinutes').value = option.dataset.estimatedMinutes || '0';
+    });
+    refreshStatuses();
+})();
+</script>
+}

@@ -8,6 +8,10 @@
         <form id="createTaskForm" asp-controller="Boards" asp-action="CreateTask" method="post" class="grid gap-6 md:grid-cols-2">
             <input type="hidden" name="boardId" value="@Model.Board.Id" />
             <div class="space-y-4">
+                @if (Model.TaskTemplates.Any())
+                {
+                    <div><label class="label">Usar modelo</label><select id="CreateTaskTemplate" class="field"><option value="">Começar em branco</option>@foreach(var template in Model.TaskTemplates){var priority=template.Definition.TryGetValue("priority",out var templatePriority)?templatePriority?.ToString()??"medium":"medium";var minutes=template.Definition.TryGetValue("estimatedMinutes",out var templateMinutes)?templateMinutes?.ToString()??"0":"0";<option value="@template.Id" data-name="@template.Name" data-description="@template.Description" data-priority="@priority" data-estimated-minutes="@minutes">@template.Name</option>}</select><p class="mt-1 text-xs text-slate-400">Preenche os campos padrão; você ainda pode ajustá-los.</p></div>
+                }
                 <div><label class="label">Título *</label><input name="title" required maxlength="200" class="field" /></div>
                 <div><label class="label">Descrição</label><textarea name="description" rows="4" maxlength="5000" class="field"></textarea></div>
                 <div class="grid grid-cols-2 gap-3">

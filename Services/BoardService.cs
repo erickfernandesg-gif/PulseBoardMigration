@@ -121,6 +121,8 @@ public class BoardService
         var files = await client.From<TaskFile>().Get();
         var approvalSteps = await client.From<TaskApprovalStep>().Get();
         var approvalDelegations = await client.From<ApprovalDelegation>().Get();
+        var templates = await client.From<TaskTemplate>().Where(x => x.IsActive == true).Get();
+        var ownerTeamId = profiles.Models.FirstOrDefault(x => x.Id == board.OwnerId)?.TeamId;
 
         var settings = board.Settings?.Count > 0
             ? board.Settings
@@ -150,6 +152,9 @@ public class BoardService
             ,Files = files.Models.Where(x => taskIds.Contains(x.TaskId)).OrderByDescending(x => x.CreatedAt).ToList()
             ,ApprovalSteps = approvalSteps.Models.Where(x => taskIds.Contains(x.TaskId)).OrderBy(x => x.Sequence).ToList()
             ,ApprovalDelegations = approvalDelegations.Models.ToList()
+            ,TaskTemplates = templates.Models.Where(x =>
+                (!x.BoardId.HasValue || x.BoardId == boardId) &&
+                (!x.TeamId.HasValue || x.TeamId == ownerTeamId)).OrderBy(x => x.Name).ToList()
         };
     }
 

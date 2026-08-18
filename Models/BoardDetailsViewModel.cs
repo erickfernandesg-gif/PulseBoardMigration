@@ -20,6 +20,7 @@ public class BoardDetailsViewModel
     public List<TaskFile> Files { get; set; } = [];
     public List<TaskApprovalStep> ApprovalSteps { get; set; } = [];
     public List<ApprovalDelegation> ApprovalDelegations { get; set; } = [];
+    public List<TaskTemplate> TaskTemplates { get; set; } = [];
     public bool CanManageBoard => Board.OwnerId == CurrentUserId ||
         Profile(CurrentUserId)?.Role is "admin" or "manager";
 

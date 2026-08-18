@@ -47,4 +47,26 @@ public class WorkRulesTests
             [(b, a), (c, b), (c, shortTask)]);
         Assert.True(result.SetEquals([a, b, c]));
     }
+
+    [Fact]
+    public void PortfolioDependencyRejectsIndirectCycle()
+    {
+        var a = Guid.NewGuid(); var b = Guid.NewGuid(); var c = Guid.NewGuid();
+        Assert.True(PlanningRules.WouldCreatePortfolioCycle(c, a, [(a, b), (b, c)]));
+        Assert.False(PlanningRules.WouldCreatePortfolioCycle(a, c, [(a, b)]));
+    }
+
+    [Theory]
+    [InlineData("critical", "critical")]
+    [InlineData("unexpected", "medium")]
+    public void PlanningPriorityIsNormalized(string value, string expected) =>
+        Assert.Equal(expected, PlanningRules.NormalizePriority(value));
+
+    [Fact]
+    public void FinishToStartDependencyUsesPredecessorEndAndLag()
+    {
+        var required = PlanningRules.RequiredSuccessorDate(
+            "finish_to_start", new DateTime(2026, 8, 1), new DateTime(2026, 8, 10), 2);
+        Assert.Equal(new DateTime(2026, 8, 12), required);
+    }
 }

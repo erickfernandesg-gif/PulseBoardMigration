@@ -1,0 +1,44 @@
+@model PulseBoardMigration.Models.EnterprisePlanningViewModel
+@{
+    string Hours(int minutes) => $"{minutes / 60m:0.#}h";
+    string HealthLabel(string value) => value switch { "off_track" => "Atrasado", "at_risk" => "Em risco", "on_hold" => "Em espera", _ => "No prazo" };
+    string HealthClass(string value) => value switch { "off_track" => "bg-red-100 text-red-700", "at_risk" => "bg-amber-100 text-amber-700", "on_hold" => "bg-slate-200 text-slate-600", _ => "bg-emerald-100 text-emerald-700" };
+    var baselineBoards = Model.Baselines.Where(x => x.IsActive).Select(x => x.BoardId).ToHashSet();
+    var projectsWithoutBaseline = Model.ProjectMetrics.Count(x => !baselineBoards.Contains(x.BoardId));
+    var attentionCount = Model.OverdueTasks + Model.DependencyConflicts + projectsWithoutBaseline + (Model.CapacityUtilizationPercent > 100 ? 1 : 0);
+}
+
+<div id="visao-geral" class="planning-panel space-y-5" role="tabpanel">
+    <section class="grid grid-cols-2 gap-3 lg:grid-cols-5" aria-label="Resumo do período">
+        <div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold text-slate-500">Projetos</p><p class="mt-1 text-2xl font-bold">@Model.ProjectMetrics.Count</p><p class="text-xs text-slate-400">no filtro atual</p></div>
+        <div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold text-slate-500">Ocupação da equipe</p><p class="mt-1 text-2xl font-bold @(Model.CapacityUtilizationPercent > 100 ? "text-red-600" : Model.CapacityUtilizationPercent > 85 ? "text-amber-600" : "text-emerald-600")">@Model.CapacityUtilizationPercent.ToString("0")%</p><p class="text-xs text-slate-400">@Hours(Model.AllocatedMinutes) de @Hours(Model.EffectiveCapacityMinutes)</p></div>
+        <div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold text-slate-500">Tarefas abertas</p><p class="mt-1 text-2xl font-bold">@Model.OpenTasks</p><p class="text-xs text-slate-400">trabalho pendente</p></div>
+        <div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold text-slate-500">Tarefas atrasadas</p><p class="mt-1 text-2xl font-bold @(Model.OverdueTasks > 0 ? "text-red-600" : "text-emerald-600")">@Model.OverdueTasks</p><p class="text-xs text-slate-400">precisam de revisão</p></div>
+        <div class="col-span-2 rounded-xl border bg-white p-4 lg:col-span-1"><p class="text-xs font-bold text-slate-500">Conflitos de datas</p><p class="mt-1 text-2xl font-bold @(Model.DependencyConflicts > 0 ? "text-amber-600" : "text-emerald-600")">@Model.DependencyConflicts</p><p class="text-xs text-slate-400">entre projetos</p></div>
+    </section>
+
+    <section class="rounded-2xl border bg-white p-5">
+        <p class="text-xs font-bold uppercase tracking-wide text-slate-400">Próximos passos</p><h2 class="text-lg font-bold">O que precisa da sua atenção</h2>
+        @if (attentionCount == 0) { <div class="mt-4 rounded-xl bg-emerald-50 p-4 text-sm text-emerald-800"><strong>Planejamento em ordem.</strong> Não encontramos sobrecarga, atrasos ou conflitos no período.</div> }
+        else
+        {
+            <div class="mt-4 grid gap-3 lg:grid-cols-2">
+                @if (Model.CapacityUtilizationPercent > 100) { <a href="#equipe" class="planning-jump rounded-xl border border-red-200 bg-red-50 p-4 hover:border-red-400"><strong class="text-red-800">Equipe sobrecarregada</strong><p class="mt-1 text-sm text-red-700">A demanda supera as horas disponíveis. Revise ausências ou redistribua tarefas.</p><span class="mt-2 inline-block text-xs font-bold text-red-700">Conferir capacidade →</span></a> }
+                @if (Model.OverdueTasks > 0) { <a href="/Schedule" class="rounded-xl border border-red-200 bg-red-50 p-4 hover:border-red-400"><strong class="text-red-800">@Model.OverdueTasks tarefa(s) atrasada(s)</strong><p class="mt-1 text-sm text-red-700">Revise responsáveis e datas antes de confirmar o plano.</p><span class="mt-2 inline-block text-xs font-bold text-red-700">Abrir cronograma →</span></a> }
+                @if (Model.DependencyConflicts > 0) { <a href="#prazos" class="planning-jump rounded-xl border border-amber-200 bg-amber-50 p-4 hover:border-amber-400"><strong class="text-amber-900">@Model.DependencyConflicts conflito(s) entre projetos</strong><p class="mt-1 text-sm text-amber-800">Um projeto está programado antes do momento permitido.</p><span class="mt-2 inline-block text-xs font-bold text-amber-800">Revisar vínculos →</span></a> }
+                @if (projectsWithoutBaseline > 0) { <a href="#prazos" class="planning-jump rounded-xl border border-indigo-200 bg-indigo-50 p-4 hover:border-indigo-400"><strong class="text-indigo-900">@projectsWithoutBaseline projeto(s) sem plano de referência</strong><p class="mt-1 text-sm text-indigo-800">Salve a versão aprovada para acompanhar mudanças.</p><span class="mt-2 inline-block text-xs font-bold text-indigo-800">Criar referência →</span></a> }
+            </div>
+        }
+    </section>
+
+    <section class="overflow-hidden rounded-2xl border bg-white">
+        <div class="flex flex-col gap-2 border-b p-5 sm:flex-row sm:items-center sm:justify-between"><div><h2 class="text-lg font-bold">Situação dos projetos</h2><p class="text-xs text-slate-500">Compare o plano aprovado com a previsão atual.</p></div><a href="/Schedule" class="text-sm font-bold text-indigo-600">Ver cronograma completo →</a></div>
+        <div class="overflow-x-auto"><table class="w-full min-w-[1080px] text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-500"><tr><th class="p-4">Projeto</th><th>Situação</th><th>Abertas</th><th>Atrasadas</th><th>Bloqueadas</th><th>Esforço aberto</th><th>Plano → atual</th><th>Fim aprovado</th><th>Previsão atual</th><th>Diferença</th></tr></thead><tbody class="divide-y">
+        @foreach (var item in Model.ProjectMetrics)
+        {
+            <tr class="hover:bg-slate-50"><td class="p-4"><a href="/Boards/Details/@item.BoardId" class="font-bold hover:text-indigo-600">@item.Name</a>@if (item.HasDependencyConflict) { <span class="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">REVISAR VÍNCULO</span> }</td><td><span class="rounded-full px-2 py-1 text-[10px] font-bold @HealthClass(item.Health)">@HealthLabel(item.Health)</span></td><td>@item.OpenTasks</td><td class="@(item.OverdueTasks > 0 ? "font-bold text-red-600" : "")">@item.OverdueTasks</td><td class="@(item.BlockedTasks > 0 ? "font-bold text-amber-600" : "")">@item.BlockedTasks</td><td>@Hours(item.EstimatedMinutes)</td><td class="@(item.EffortVarianceMinutes > 0 ? "font-bold text-red-600" : item.EffortVarianceMinutes < 0 ? "font-bold text-emerald-600" : "text-slate-400")">@(item.BaselineEstimatedMinutes.HasValue ? $"{Hours(item.BaselineEstimatedMinutes.Value)} → {Hours(item.BaselineEstimatedMinutes.Value + item.EffortVarianceMinutes)}" : "Sem referência")</td><td>@(item.BaselineEnd?.ToString("dd/MM/yyyy") ?? "—")</td><td>@((item.ForecastEnd ?? item.PlannedEnd)?.ToString("dd/MM/yyyy") ?? "—")</td><td class="@(item.ScheduleVarianceDays > 0 ? "font-bold text-red-600" : item.ScheduleVarianceDays < 0 ? "font-bold text-emerald-600" : "text-slate-400")">@(item.BaselineEnd.HasValue ? $"{item.ScheduleVarianceDays:+#;-#;0} dias" : "Sem referência")</td></tr>
+        }
+        @if (!Model.ProjectMetrics.Any()) { <tr><td colspan="10" class="p-10 text-center"><strong class="block text-slate-600">Nenhum projeto encontrado</strong><span class="text-sm text-slate-400">Altere os filtros ou confirme se existem projetos ativos.</span></td></tr> }
+        </tbody></table></div>
+    </section>
+</div>

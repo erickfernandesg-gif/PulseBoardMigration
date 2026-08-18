@@ -172,6 +172,7 @@ public class ProjectBaseline : BaseModel
     [Column("planned_end")] public DateTime? PlannedEnd { get; set; }
     [Column("budget_amount")] public decimal? BudgetAmount { get; set; }
     [Column("snapshot")] public Dictionary<string, object?> Snapshot { get; set; } = [];
+    [Column("is_active")] public bool IsActive { get; set; }
     [Column("created_by")] public Guid? CreatedBy { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; }
 }
@@ -215,6 +216,9 @@ public class RecurringTaskRule : BaseModel
     [Column("cadence")] public string Cadence { get; set; } = "weekly";
     [Column("interval_count")] public int IntervalCount { get; set; } = 1;
     [Column("next_run_at")] public DateTime NextRunAt { get; set; }
+    [Column("time_zone")] public string TimeZone { get; set; } = "America/Sao_Paulo";
+    [Column("target_status")] public string TargetStatus { get; set; } = "todo";
+    [Column("priority")] public string Priority { get; set; } = "medium";
     [Column("assigned_to")] public Guid? AssignedTo { get; set; }
     [Column("estimated_minutes")] public int EstimatedMinutes { get; set; }
     [Column("due_after_days")] public int DueAfterDays { get; set; }
@@ -223,6 +227,10 @@ public class RecurringTaskRule : BaseModel
     [Column("created_by")] public Guid? CreatedBy { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; }
     [Column("last_run_at")] public DateTime? LastRunAt { get; set; }
+    [Column("ends_at")] public DateTime? EndsAt { get; set; }
+    [Column("max_occurrences")] public int? MaxOccurrences { get; set; }
+    [Column("occurrences_created")] public int OccurrencesCreated { get; set; }
+    [Column("updated_at")] public DateTime UpdatedAt { get; set; }
 }
 
 [Table("task_mentions")]
@@ -329,6 +337,8 @@ public class CompanyScheduleViewModel
     public List<ScheduleRow> Rows { get; set; } = [];
     public List<ProjectMilestone> Milestones { get; set; } = [];
     public List<Board> Boards { get; set; } = [];
+    public List<PortfolioDependency> PortfolioDependencies { get; set; } = [];
+    public Board? Board(Guid id) => Boards.FirstOrDefault(x => x.Id == id);
 }
 
 public class BillingViewModel

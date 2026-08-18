@@ -319,6 +319,24 @@ function initTaskFormRules() {
 
     const chatImages = document.getElementById('ChatImages');
     chatImages?.addEventListener('change', () => renderChatImagePreview(chatImages.files));
+
+    const template = document.getElementById('CreateTaskTemplate');
+    template?.addEventListener('change', () => {
+        const option = template.selectedOptions[0];
+        const form = document.getElementById('createTaskForm');
+        if (!form || !option?.value) return;
+        const title = form.elements.namedItem('title');
+        const description = form.elements.namedItem('description');
+        const priority = form.elements.namedItem('priority');
+        const hours = form.elements.namedItem('estimatedHours');
+        const minutes = form.elements.namedItem('estimatedMinutes');
+        const totalMinutes = Math.max(0, Number.parseInt(option.dataset.estimatedMinutes || '0', 10) || 0);
+        if (title && !title.value.trim()) title.value = option.dataset.name || '';
+        if (description) description.value = option.dataset.description || '';
+        if (priority) priority.value = option.dataset.priority || 'medium';
+        if (hours) hours.value = Math.floor(totalMinutes / 60).toString();
+        if (minutes) minutes.value = (totalMinutes % 60).toString();
+    });
 }
 
 function renderChatImagePreview(files) {

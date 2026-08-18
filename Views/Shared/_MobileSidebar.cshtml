@@ -1,3 +1,4 @@
+@{ var canManageMobile = User.IsInRole("admin") || User.IsInRole("manager"); }
 <div id="mobileOverlay" class="fixed inset-0 z-40 hidden bg-slate-950/40 md:hidden"></div>
 <aside id="mobileSidebar" class="fixed inset-y-0 left-0 z-50 flex w-72 -translate-x-full flex-col bg-white p-4 shadow-2xl transition-transform md:hidden">
     <div class="mb-5 flex items-center justify-between"><strong class="text-xl">PulseBoard</strong><button id="closeMobileMenuBtn">✕</button></div>
@@ -5,15 +6,15 @@
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Dashboard">Dashboard</a>
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Work">Meu trabalho</a>
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Boards">Quadros</a>
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Management">Gestão da equipe</a>
+        @if(canManageMobile){<a class="block rounded-lg p-3 hover:bg-slate-50" href="/Management">Gestão da equipe</a>
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Schedule">Cronograma</a>
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Planning">Planejamento</a>
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Billing">Faturamento</a>
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Executive">Painel executivo</a>
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Reports">Relatórios</a>
+        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Reports">Relatórios</a>}
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Forms">Formulários</a>
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Automations">Automações</a>
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Admin">Administração</a>
+        @if(canManageMobile){<a class="block rounded-lg p-3 hover:bg-slate-50" href="/Automations">Automações</a>
+        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Admin">Administração</a>}
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Settings">Configurações</a>
     </nav>
 </aside>

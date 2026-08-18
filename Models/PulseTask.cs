@@ -77,6 +77,12 @@ public class PulseTask : BaseModel
     [Column("parent_task_id")]
     public Guid? ParentTaskId { get; set; }
 
+    [Column("recurring_rule_id")]
+    public Guid? RecurringRuleId { get; set; }
+
+    [Column("recurrence_scheduled_at")]
+    public DateTime? RecurrenceScheduledAt { get; set; }
+
     [Column("custom_fields")]
     public Dictionary<string, object?> CustomFields { get; set; } = [];
 

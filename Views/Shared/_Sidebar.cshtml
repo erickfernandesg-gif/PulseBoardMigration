@@ -1,20 +1,21 @@
 @{
     var path = Context.Request.Path.Value ?? "/";
+    var canManage = User.IsInRole("admin") || User.IsInRole("manager");
     var links = new[]
     {
-        ("/Dashboard", "layout-dashboard", "Dashboard"),
-        ("/Work", "list-checks", "Meu trabalho"),
-        ("/Boards", "kanban-square", "Quadros"),
-        ("/Management", "users-round", "Gestão da equipe"),
-        ("/Schedule", "calendar-range", "Cronograma"),
-        ("/Planning", "network", "Planejamento"),
-        ("/Billing", "badge-dollar-sign", "Faturamento"),
-        ("/Executive", "chart-no-axes-combined", "Painel executivo"),
-        ("/Reports", "file-chart-column", "Relatórios"),
-        ("/Forms", "clipboard-list", "Formulários"),
-        ("/Automations", "workflow", "Automações"),
-        ("/Admin", "shield-check", "Administração"),
-        ("/Settings", "settings", "Configurações")
+        ("/Dashboard", "layout-dashboard", "Dashboard", false),
+        ("/Work", "list-checks", "Meu trabalho", false),
+        ("/Boards", "kanban-square", "Quadros", false),
+        ("/Management", "users-round", "Gestão da equipe", true),
+        ("/Schedule", "calendar-range", "Cronograma", true),
+        ("/Planning", "network", "Planejamento", true),
+        ("/Billing", "badge-dollar-sign", "Faturamento", true),
+        ("/Executive", "chart-no-axes-combined", "Painel executivo", true),
+        ("/Reports", "file-chart-column", "Relatórios", true),
+        ("/Forms", "clipboard-list", "Formulários", false),
+        ("/Automations", "workflow", "Automações", true),
+        ("/Admin", "shield-check", "Administração", true),
+        ("/Settings", "settings", "Configurações", false)
     };
 }
 <aside id="desktopSidebar" class="relative hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
@@ -24,7 +25,7 @@
         <button id="toggleSidebarBtn" class="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-100"><i id="toggleIcon" data-lucide="panel-left-close" class="h-4 w-4"></i></button>
     </div>
     <nav class="flex-1 space-y-1 overflow-y-auto p-3">
-        @foreach (var link in links)
+        @foreach (var link in links.Where(link => !link.Item4 || canManage))
         {
             var active = path.StartsWith(link.Item1, StringComparison.OrdinalIgnoreCase);
             <a href="@link.Item1" title="@link.Item3" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold @(active ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50")">

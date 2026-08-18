@@ -279,6 +279,7 @@ public class WorkManagementService
         var boards = await client.From<Board>().Get();
         var profiles = await client.From<Profile>().Get();
         var milestones = await client.From<ProjectMilestone>().Get();
+        var portfolioDependencies = await client.From<PortfolioDependency>().Get();
         var dependencies = await client.From<TaskDependency>().Get();
         var criticalIds = boards.Models.SelectMany(board =>
         {
@@ -326,7 +327,8 @@ public class WorkManagementService
             To = rangeEnd,
             Rows = rows,
             Boards = boards.Models.ToList(),
-            Milestones = milestones.Models.Where(x => x.DueDate >= rangeStart && x.DueDate <= rangeEnd).ToList()
+            Milestones = milestones.Models.Where(x => x.DueDate >= rangeStart && x.DueDate <= rangeEnd).ToList(),
+            PortfolioDependencies = portfolioDependencies.Models.ToList()
         };
     }
 

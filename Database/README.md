@@ -16,6 +16,8 @@ Para uma instalação nova, execute na ordem:
 10. `board_operations_suite.sql` — colunas/WIP, ações em massa, intake, auditoria por campo, aprovações, espelhos, dependências e SLA.
 11. `board_operations_integration_fix.sql` — validação e integração de aprovações, substitutos, automações e ciclos de dependência.
 12. `import_monday_cronograma_2026.sql` e `finalize_monday_cronograma_2026.sql` — carga idempotente do cronograma corporativo exportado do Monday.
+13. `planning_workspace_upgrade.sql` — cockpit de planejamento, baseline transacional, dependências sem ciclos e recorrências idempotentes.
+14. `planning_workspace_hardening.sql` — privilégios mínimos, políticas RLS sem sobreposição e índices dos relacionamentos de planejamento.
 
 Os scripts de upgrade são idempotentes sempre que possível. Alterações de produção devem ser aplicadas como migrações, nunca colando somente trechos isolados sem testar em uma transação.
 
