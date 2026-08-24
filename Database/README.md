@@ -10,16 +10,16 @@ Para uma instalação nova, execute na ordem:
 4. `security_hardening.sql`
 5. `fix_tasks_rls_recursion.sql`
 6. `boards_reliability_upgrade.sql`
-7. `notification_compatibility_fix.sql`
-8. `respond_assignment_notification_fix.sql`
-9. `task_assignment_trigger_fix.sql`
-10. `board_operations_suite.sql` — colunas/WIP, ações em massa, auditoria por campo, aprovações, espelhos, dependências e SLA.
-11. `remove_intake_forms.sql` — remove a estrutura legada de formulários públicos e seus dados.
-12. `automation_project_scope_upgrade.sql` — pausa regras globais legadas e aplica automações apenas ao projeto configurado.
-11. `board_operations_integration_fix.sql` — validação e integração de aprovações, substitutos, automações e ciclos de dependência.
-12. `import_monday_cronograma_2026.sql` e `finalize_monday_cronograma_2026.sql` — carga idempotente do cronograma corporativo exportado do Monday.
-13. `planning_workspace_upgrade.sql` — cockpit de planejamento, baseline transacional, dependências sem ciclos e recorrências idempotentes.
-14. `planning_workspace_hardening.sql` — privilégios mínimos, políticas RLS sem sobreposição e índices dos relacionamentos de planejamento.
+7. `task_conversation_reliability_upgrade.sql` — completa conversa, imagens e menções e alinha as permissões à participação na demanda.
+8. `notification_compatibility_fix.sql`
+9. `respond_assignment_notification_fix.sql`
+10. `task_assignment_trigger_fix.sql`
+11. `board_operations_suite.sql` — colunas/WIP, ações em massa, auditoria por campo, aprovações, espelhos, dependências e SLA.
+12. `remove_intake_forms.sql` — remove a estrutura legada de formulários públicos e seus dados.
+13. `automation_project_scope_upgrade.sql` — pausa regras globais legadas e aplica automações apenas ao projeto configurado.
+14. `board_operations_integration_fix.sql` — validação e integração de aprovações, substitutos, automações e ciclos de dependência.
+15. `planning_workspace_upgrade.sql` — cockpit de planejamento, baseline transacional, dependências sem ciclos e recorrências idempotentes.
+16. `planning_workspace_hardening.sql` — privilégios mínimos, políticas RLS sem sobreposição e índices dos relacionamentos de planejamento.
 
 Os scripts de upgrade são idempotentes sempre que possível. Alterações de produção devem ser aplicadas como migrações, nunca colando somente trechos isolados sem testar em uma transação.
 

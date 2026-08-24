@@ -8,7 +8,7 @@
 }
 <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
     <div><a asp-controller="Boards" asp-action="Details" asp-route-id="@Model.Board.Id" class="text-sm font-bold text-indigo-600">← Voltar ao Board</a><h1 class="mt-2 text-2xl font-bold">Central de operações</h1><p class="text-sm text-slate-500">Fluxo, governança, SLA e integrações de @Model.Board.Name.</p></div>
-    <a asp-action="Import" asp-route-id="@Model.Board.Id" class="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white">Importar Monday / Excel</a>
+    <a asp-action="Import" asp-route-id="@Model.Board.Id" class="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white">Importar Excel / CSV</a>
 </div>
 <div class="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
     <div class="rounded-xl border bg-white p-4"><span class="text-[10px] font-bold uppercase text-slate-400">Tarefas</span><strong class="mt-1 block text-xl">@ownTasks.Count</strong></div>

@@ -1,6 +1,9 @@
 @model PulseBoardMigration.Models.BoardDetailsViewModel
 @{
     ViewData["Title"] = Model.Board.Name;
+    var currentTargetMonth = DateTime.UtcNow.ToString("yyyy-MM");
+    var availableMonths = Model.Tasks.Where(task => !string.IsNullOrWhiteSpace(task.TargetMonth))
+        .Select(task => task.TargetMonth!).Append(currentTargetMonth).Distinct().OrderByDescending(month => month).ToList();
     string PriorityLabel(string value) => value switch
     {
         "low" => "Baixa",
@@ -27,16 +30,16 @@
         <select id="filterMonth" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
             <option value="">Todos os ciclos</option>
             <option value="inbox">Sem ciclo</option>
-            @foreach (var month in Model.Tasks.Where(t => !string.IsNullOrWhiteSpace(t.TargetMonth)).Select(t => t.TargetMonth).Distinct().OrderDescending())
+            @foreach (var month in availableMonths)
             {
-                <option value="@month">@month</option>
+                <option value="@month" selected="@(month == currentTargetMonth)">@month</option>
             }
         </select>
         <select id="filterUser" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
             <option value="">Toda a equipe</option>
             @foreach (var profile in Model.Profiles)
             {
-                <option value="@profile.Id">@(profile.FullName ?? profile.Email)</option>
+                <option value="@profile.Id" selected="@(profile.Id == Model.CurrentUserId)">@(profile.FullName ?? profile.Email)</option>
             }
         </select>
         <div class="flex rounded-lg bg-slate-100 p-1">
@@ -52,10 +55,20 @@
 </div>
 
 <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Total</p><p class="mt-0.5 text-xl font-bold">@Model.Tasks.Count</p></div>
-    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Concluídas</p><p class="mt-0.5 text-xl font-bold text-emerald-600">@Model.Tasks.Count(t => t.Status == "done")</p></div>
-    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Bloqueadas</p><p class="mt-0.5 text-xl font-bold text-red-600">@Model.Tasks.Count(t => t.IsBlocked)</p></div>
-    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Horas registradas</p><p class="mt-0.5 text-xl font-bold text-indigo-600">@((Model.TimeLogs.Sum(x => x.Minutes) / 60m).ToString("0.0"))h</p></div>
+    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Total</p><p id="filteredTotal" class="mt-0.5 text-xl font-bold">0</p></div>
+    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Concluídas</p><p id="filteredDone" class="mt-0.5 text-xl font-bold text-emerald-600">0</p></div>
+    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Bloqueadas</p><p id="filteredBlocked" class="mt-0.5 text-xl font-bold text-red-600">0</p></div>
+    <div class="rounded-xl border border-slate-200 bg-white px-4 py-3"><p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Horas registradas</p><p id="filteredHours" class="mt-0.5 text-xl font-bold text-indigo-600">0,0h</p></div>
+</div>
+<div id="taskMetricsData" class="hidden">
+    @foreach (var task in Model.Tasks)
+    {
+        var metricCollaborators = Model.Collaborators.Where(item => item.TaskId == task.Id).Select(item => item.UserId);
+        <i data-task-metric data-target-month="@task.TargetMonth" data-assigned-to="@task.AssignedTo"
+           data-collaborators="@string.Join(",", metricCollaborators)" data-status="@task.Status"
+           data-is-blocked="@task.IsBlocked.ToString().ToLowerInvariant()"
+           data-logged-minutes="@Model.TimeLogs.Where(item => item.TaskId == task.Id).Sum(item => item.Minutes)"></i>
+    }
 </div>
 
 <div id="view-kanban" class="kanban-board flex min-h-0 gap-4 overflow-x-auto overflow-y-hidden pb-3">
@@ -64,10 +77,12 @@
         <section class="flex h-full w-[min(20rem,calc(100vw-2rem))] shrink-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-100/60 p-3 md:w-80">
             <header class="mb-3 flex shrink-0 items-center justify-between">
                 <h2 class="text-xs font-bold uppercase tracking-wider text-slate-600">@column.Title</h2>
-                <span class="rounded-full bg-white px-2 py-1 text-xs font-bold text-slate-500">@Model.Tasks.Count(t => t.Status == column.Id)</span>
+                <span data-column-count="@column.Id" class="rounded-full bg-white px-2 py-1 text-xs font-bold text-slate-500">0</span>
             </header>
             <div data-column-id="@column.Id" class="kanban-column-body flex min-h-20 flex-1 flex-col gap-3 overflow-y-auto pr-1">
-                @foreach (var task in Model.Tasks.Where(t => t.Status == column.Id).OrderBy(t => t.PositionIndex))
+                @foreach (var task in Model.Tasks.Where(t => t.Status == column.Id)
+                    .OrderBy(t => t.DueDate ?? t.StartDate ?? DateTime.MaxValue)
+                    .ThenBy(t => t.StartDate ?? DateTime.MaxValue).ThenBy(t => t.Title))
                 {
                     var profile = Model.Profile(task.AssignedTo);
                     var client = Model.Client(task.ClientId);
@@ -80,6 +95,10 @@
                              data-status="@task.Status"
                              data-priority="@task.Priority"
                              data-assigned-to="@task.AssignedTo"
+                             data-accountable-owner-id="@task.AccountableOwnerId"
+                             data-created-by="@task.CreatedBy"
+                             data-board-owner-id="@Model.Board.OwnerId"
+                             data-current-user-id="@Model.CurrentUserId"
                              data-client-id="@task.ClientId"
                              data-start-date="@(task.StartDate?.ToString("yyyy-MM-dd"))"
                              data-due-date="@(task.DueDate?.ToString("yyyy-MM-dd"))"
@@ -87,7 +106,6 @@
                              data-estimated-minutes="@task.EstimatedMinutes"
                              data-sla-minutes="@task.SlaMinutes"
                              data-planned-value="@task.PlannedValue"
-                             data-custom-fields="@System.Text.Json.JsonSerializer.Serialize(task.CustomFields)"
                              data-is-blocked="@task.IsBlocked.ToString().ToLowerInvariant()"
                              data-blocker-reason="@task.BlockerReason"
                              data-collaborators="@string.Join(",", collaborators)"
@@ -98,6 +116,10 @@
                         </div>
                         <h3 class="text-sm font-bold text-slate-900">@task.Title</h3>
                         <p class="mt-1 line-clamp-2 text-xs text-slate-500">@task.Description</p>
+                        <div class="mt-3 grid grid-cols-2 gap-2 text-[10px]">
+                            <span class="rounded-lg bg-slate-50 px-2 py-1.5 text-slate-500"><strong class="block uppercase text-slate-400">Início</strong>@(task.StartDate?.ToString("dd/MM/yyyy") ?? "Sem data")</span>
+                            <span class="rounded-lg bg-slate-50 px-2 py-1.5 text-slate-500"><strong class="block uppercase text-slate-400">Fim</strong>@(task.DueDate?.ToString("dd/MM/yyyy") ?? "Sem data")</span>
+                        </div>
                         @if (client != null) { <p class="mt-3 text-[10px] font-bold uppercase text-slate-400">@client.Name</p> }
                         <div class="mt-3 flex items-center justify-between border-t border-slate-100 pt-3">
                             <span class="text-xs text-slate-500">@(profile?.FullName ?? "Sem responsável")</span>
@@ -126,21 +148,6 @@
 {
     <template id="task-extra-@task.Id">
         <div class="grid gap-6 lg:grid-cols-3">
-            @if (task.CustomFields.TryGetValue("monday_item_id", out var mondayId))
-            {
-                <section class="lg:col-span-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
-                    <div class="mb-3 flex items-center justify-between"><h4 class="text-xs font-bold uppercase text-indigo-700">Dados importados do Monday</h4><span class="text-[10px] font-bold text-indigo-400">ID @mondayId</span></div>
-                    <div class="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                        @foreach (var field in new[] { ("monday_group", "Grupo"), ("monday_original_status", "Status original"), ("team", "Equipe"), ("project_type", "Tipo de projeto"), ("slo_result", "SLO"), ("monthly_occupancy", "Ocupação mensal"), ("development_hours", "Horas realizadas"), ("specific_project", "Projeto específico"), ("actual_start", "Início realizado"), ("actual_end", "Fim realizado"), ("subelements_summary", "Subelementos"), ("unmatched_owners", "Responsáveis não encontrados") })
-                        {
-                            if (task.CustomFields.TryGetValue(field.Item1, out var value) && value != null && value.ToString() is { Length: > 0 } text && text != "[]")
-                            {
-                                <div><p class="font-bold uppercase text-slate-400">@field.Item2</p><p class="mt-1 whitespace-pre-wrap text-slate-700">@text</p></div>
-                            }
-                        }
-                    </div>
-                </section>
-            }
             <section>
                 <h4 class="mb-3 text-xs font-bold uppercase text-slate-500">Checklist</h4>
                 <div class="space-y-2">

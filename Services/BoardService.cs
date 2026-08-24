@@ -259,7 +259,7 @@ public class BoardService
             p_due_date = task.DueDate, p_assigned_to = task.AssignedTo, p_client_id = task.ClientId,
             p_target_month = string.IsNullOrWhiteSpace(task.TargetMonth) ? null : task.TargetMonth.Trim(),
             p_estimated_minutes = Math.Max(0, task.EstimatedMinutes), p_sla_minutes = task.SlaMinutes,
-            p_planned_value = task.PlannedValue, p_custom_fields = task.CustomFields,
+            p_planned_value = task.PlannedValue, p_custom_fields = existingTask.CustomFields,
             p_is_blocked = task.IsBlocked, p_blocker_reason = task.BlockerReason,
             p_collaborator_ids = (collaboratorIds ?? []).Where(id => id != Guid.Empty).Distinct().ToArray()
         });
@@ -308,7 +308,7 @@ public class BoardService
         return true;
     }
 
-    public async Task<TaskComment?> AddCommentAsync(
+    public async Task<TaskCommentSubmissionResult> AddCommentAsync(
         Guid taskId,
         Guid userId,
         string? content,
@@ -345,16 +345,27 @@ public class BoardService
             CreatedAt = DateTime.UtcNow
         });
         var comment = response.Models.FirstOrDefault();
-        if (comment == null) return null;
+        if (comment == null) return new TaskCommentSubmissionResult(null);
+        string? mentionWarning = null;
         foreach (var mentionedUserId in (mentionedUserIds ?? []).Where(id => id != Guid.Empty && id != userId).Distinct())
         {
-            await client.From<TaskMention>().Insert(new TaskMention
+            try
             {
-                TaskId = taskId, CommentId = comment.Id, MentionedUserId = mentionedUserId,
-                MentionedBy = userId, CreatedAt = DateTime.UtcNow
-            });
+                await client.From<TaskMention>().Insert(new TaskMention
+                {
+                    TaskId = taskId, CommentId = comment.Id, MentionedUserId = mentionedUserId,
+                    MentionedBy = userId, CreatedAt = DateTime.UtcNow
+                });
+            }
+            catch (Exception mentionError)
+            {
+                _logger.LogWarning(mentionError,
+                    "Mensagem {CommentId} salva, mas a menção ao usuário {MentionedUserId} falhou",
+                    comment.Id, mentionedUserId);
+                mentionWarning = "Mensagem enviada, mas não foi possível avisar uma ou mais pessoas mencionadas.";
+            }
         }
-        if (images.Count == 0) return comment;
+        if (images.Count == 0) return new TaskCommentSubmissionResult(comment, mentionWarning);
 
         var storage = _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket);
         var uploadedPaths = new List<string>();
@@ -383,7 +394,7 @@ public class BoardService
                     CreatedAt = DateTime.UtcNow
                 });
             }
-            return comment;
+            return new TaskCommentSubmissionResult(comment, mentionWarning);
         }
         catch (Exception exception)
         {

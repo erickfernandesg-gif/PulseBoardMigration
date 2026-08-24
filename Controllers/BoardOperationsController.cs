@@ -131,7 +131,7 @@ public class BoardOperationsController : Controller
         await CanManageBoardAsync(id) ? View(new BoardImportPreviewViewModel { BoardId = id }) : Forbid();
 
     [HttpPost]
-    public async Task<IActionResult> PreviewImport(Guid boardId, IFormFile? file, string source)
+    public async Task<IActionResult> PreviewImport(Guid boardId, IFormFile? file)
     {
         if (!await CanManageBoardAsync(boardId)) return Forbid();
         try
@@ -140,7 +140,7 @@ public class BoardOperationsController : Controller
             if (file.Length <= 0 || file.Length > 10 * 1024 * 1024) throw new InvalidOperationException("O arquivo deve ter até 10 MB.");
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
             if (extension is not ".xlsx" and not ".csv") throw new InvalidOperationException("Envie um arquivo .xlsx ou .csv.");
-            return View("Import", _service.ParseImport(boardId, file.OpenReadStream(), file.FileName, source));
+            return View("Import", _service.ParseImport(boardId, file.OpenReadStream(), file.FileName));
         }
         catch (Exception ex) { TempData["Error"] = ex.Message; return RedirectToAction(nameof(Import), new { id = boardId }); }
     }
@@ -148,13 +148,13 @@ public class BoardOperationsController : Controller
     [HttpPost]
     [RequestSizeLimit(2_000_000)]
     public async Task<IActionResult> CommitImport(Guid boardId, string payload, string titleColumn,
-        string? descriptionColumn, string? statusColumn, string? priorityColumn, string? dueDateColumn, string? source)
+        string? descriptionColumn, string? statusColumn, string? priorityColumn, string? dueDateColumn)
     {
         if (!await CanManageBoardAsync(boardId)) return Forbid();
         if (!UserId(out var userId)) return Unauthorized();
         try
         {
-            var count = await _service.CommitImportAsync(boardId, payload, titleColumn, descriptionColumn, statusColumn, priorityColumn, dueDateColumn, source, userId);
+            var count = await _service.CommitImportAsync(boardId, payload, titleColumn, descriptionColumn, statusColumn, priorityColumn, dueDateColumn, userId);
             TempData["Success"] = $"{count} tarefas importadas com sucesso.";
             return RedirectToAction("Details", "Boards", new { id = boardId });
         }

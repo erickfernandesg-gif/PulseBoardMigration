@@ -93,7 +93,7 @@ function filteredGanttTasks() {
         if (ganttSmartFilter === 'done') return task.isDone;
         return true;
     });
-    const sort = document.getElementById('ganttSort')?.value || 'start';
+    const sort = document.getElementById('ganttSort')?.value || 'end';
     return [...smartTasks].sort((left, right) => {
         if (sort === 'end') return left.end.localeCompare(right.end) || left.start.localeCompare(right.start);
         if (sort === 'responsible') return left.responsible.localeCompare(right.responsible, 'pt-BR') || left.start.localeCompare(right.start);

@@ -186,7 +186,6 @@ public class BoardsController : Controller
         int estimatedMinutes,
         int? slaMinutes,
         decimal? plannedValue,
-        string? customFieldsJson,
         bool isBlocked,
         string? blockerReason,
         List<Guid>? collaboratorIds)
@@ -207,17 +206,6 @@ public class BoardsController : Controller
 
         try
         {
-            Dictionary<string, object?> customFields;
-            try
-            {
-                customFields = string.IsNullOrWhiteSpace(customFieldsJson)
-                    ? []
-                    : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(customFieldsJson) ?? [];
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                return BadRequest(new { success = false, message = "Os campos personalizados devem estar em JSON válido." });
-            }
             var updated = await _boardService.UpdateTaskAsync(new PulseTask
             {
                 Id = taskId,
@@ -235,7 +223,6 @@ public class BoardsController : Controller
                 EstimatedMinutes = checked(estimatedHours * 60 + estimatedMinutes),
                 SlaMinutes = slaMinutes.HasValue ? Math.Max(0, slaMinutes.Value) : null,
                 PlannedValue = plannedValue.HasValue ? Math.Max(0, plannedValue.Value) : null,
-                CustomFields = customFields,
                 IsBlocked = isBlocked,
                 BlockerReason = blockerReason
             }, collaboratorIds ?? []);
@@ -321,9 +308,14 @@ public class BoardsController : Controller
         try
         {
             var uploads = await ReadChatImagesAsync(images ?? []);
-            var comment = await _boardService.AddCommentAsync(taskId, userId, content, uploads,
+            var submission = await _boardService.AddCommentAsync(taskId, userId, content, uploads,
                 replyToId: replyToId, mentionedUserIds: mentionedUserIds ?? []);
-            return Json(new { success = comment != null, data = comment });
+            return Json(new
+            {
+                success = submission.Comment != null,
+                message = submission.Warning,
+                data = submission.Comment
+            });
         }
         catch (InvalidOperationException exception)
         {

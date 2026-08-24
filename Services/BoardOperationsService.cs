@@ -201,18 +201,18 @@ public class BoardOperationsService
     public async Task DeleteCrossProjectDependencyAsync(Guid id) =>
         await (await _clientFactory.CreateForCurrentUserAsync()).From<TaskDependency>().Where(x => x.Id == id).Delete();
 
-    public BoardImportPreviewViewModel ParseImport(Guid boardId, Stream stream, string fileName, string source)
+    public BoardImportPreviewViewModel ParseImport(Guid boardId, Stream stream, string fileName)
     {
         var rows = fileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase)
             ? ParseCsv(stream)
             : ParseXlsx(stream);
         if (rows.Count == 0) throw new InvalidOperationException("A planilha não contém linhas para importar.");
         var headers = rows.SelectMany(x => x.Keys).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        return new() { BoardId = boardId, Source = source, Headers = headers, Rows = rows.Take(100).ToList(), Payload = JsonConvert.SerializeObject(rows.Take(500)) };
+        return new() { BoardId = boardId, Headers = headers, Rows = rows.Take(100).ToList(), Payload = JsonConvert.SerializeObject(rows.Take(500)) };
     }
 
     public async Task<int> CommitImportAsync(Guid boardId, string payload, string titleColumn, string? descriptionColumn,
-        string? statusColumn, string? priorityColumn, string? dueDateColumn, string? source, Guid userId)
+        string? statusColumn, string? priorityColumn, string? dueDateColumn, Guid userId)
     {
         if (string.IsNullOrWhiteSpace(payload) || payload.Length > 1_800_000) throw new InvalidOperationException("Conteúdo de importação inválido.");
         var rows = JsonConvert.DeserializeObject<List<Dictionary<string, string>>>(payload) ?? [];
@@ -230,8 +230,7 @@ public class BoardOperationsService
             {
                 BoardId = boardId, Title = title, Description = Value(row, descriptionColumn),
                 Status = NormalizeImportedStatus(Value(row, statusColumn), board.Settings), Priority = NormalizeImportedPriority(Value(row, priorityColumn)),
-                DueDate = due, CreatedBy = userId, AccountableOwnerId = userId, WorkflowState = "inbox",
-                CustomFields = new() { ["import_source"] = string.IsNullOrWhiteSpace(source) ? "excel" : source.Trim().ToLowerInvariant() }
+                DueDate = due, CreatedBy = userId, AccountableOwnerId = userId, WorkflowState = "inbox"
             });
             count++;
         }

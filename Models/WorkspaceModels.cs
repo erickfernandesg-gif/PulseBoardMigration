@@ -226,6 +226,7 @@ public class TaskCommentAttachment : BaseModel
 
 public sealed record CommentImageUpload(string FileName, string ContentType, byte[] Content);
 public sealed record CommentAttachmentContent(string FileName, string ContentType, byte[] Content);
+public sealed record TaskCommentSubmissionResult(TaskComment? Comment, string? Warning = null);
 
 [Table("task_checklists")]
 public class TaskChecklist : BaseModel

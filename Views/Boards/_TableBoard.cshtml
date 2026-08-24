@@ -3,29 +3,34 @@
     <div class="overflow-x-auto">
         <table class="w-full text-left text-sm">
             <thead class="border-b border-slate-200 bg-slate-50 text-xs font-bold uppercase text-slate-400">
-                <tr><th class="px-5 py-4">Demanda</th><th class="px-5 py-4">Etapa</th><th class="px-5 py-4">Responsável</th><th class="px-5 py-4">Cliente</th><th class="px-5 py-4">Horas</th><th class="px-5 py-4">Prazo</th><th></th></tr>
+                <tr><th class="px-5 py-4">Tarefa</th><th class="px-5 py-4">Etapa</th><th class="px-5 py-4">Responsável</th><th class="px-5 py-4">Cliente</th><th class="px-5 py-4">Horas</th><th class="px-5 py-4">Início</th><th class="px-5 py-4">Fim</th><th></th></tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
-                @foreach (var task in Model.Tasks)
+                @foreach (var task in Model.Tasks
+                    .OrderBy(task => task.DueDate ?? task.StartDate ?? DateTime.MaxValue)
+                    .ThenBy(task => task.StartDate ?? DateTime.MaxValue).ThenBy(task => task.Title))
                 {
                     var profile = Model.Profile(task.AssignedTo);
                     var client = Model.Client(task.ClientId);
                     var collaboratorIds = Model.Collaborators.Where(c => c.TaskId == task.Id).Select(c => c.UserId);
-                    <tr class="task-filter-row hover:bg-slate-50" data-target-month="@task.TargetMonth" data-assigned-to="@task.AssignedTo">
+                    <tr class="task-filter-row hover:bg-slate-50" data-target-month="@task.TargetMonth" data-assigned-to="@task.AssignedTo" data-collaborators="@string.Join(",", collaboratorIds)">
                         <td class="px-5 py-4"><div class="flex items-center gap-2">@if(task.IsBlocked){<i data-lucide="triangle-alert" class="h-4 w-4 text-red-500"></i>}<div><strong class="text-slate-900">@task.Title</strong><p class="max-w-xs truncate text-xs text-slate-400">@task.Description</p></div></div></td>
                         <td class="px-5 py-4">@Model.Columns.FirstOrDefault(c => c.Id == task.Status)?.Title</td>
                         <td class="px-5 py-4">@(profile?.FullName ?? "—")</td>
                         <td class="px-5 py-4">@(client?.Name ?? "Interno")</td>
                         <td class="px-5 py-4">@((task.TotalMinutesSpent / 60m).ToString("0.#")) / @((task.EstimatedMinutes / 60m).ToString("0.#"))</td>
-                        <td class="px-5 py-4">@(task.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                        <td class="whitespace-nowrap px-5 py-4">@(task.StartDate?.ToString("dd/MM/yyyy") ?? "—")</td>
+                        <td class="whitespace-nowrap px-5 py-4">@(task.DueDate?.ToString("dd/MM/yyyy") ?? "—")</td>
                         <td class="px-5 py-4 text-right">
                             <button type="button" class="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold"
                                     data-task-id="@task.Id" data-row-version="@task.RowVersion" data-title="@task.Title" data-description="@task.Description"
                                     data-status="@task.Status" data-priority="@task.Priority" data-assigned-to="@task.AssignedTo"
+                                    data-accountable-owner-id="@task.AccountableOwnerId" data-created-by="@task.CreatedBy"
+                                    data-board-owner-id="@Model.Board.OwnerId" data-current-user-id="@Model.CurrentUserId"
                                     data-client-id="@task.ClientId" data-start-date="@(task.StartDate?.ToString("yyyy-MM-dd"))"
                                     data-due-date="@(task.DueDate?.ToString("yyyy-MM-dd"))" data-target-month="@task.TargetMonth"
                                     data-estimated-minutes="@task.EstimatedMinutes" data-sla-minutes="@task.SlaMinutes"
-                                    data-planned-value="@task.PlannedValue" data-custom-fields="@System.Text.Json.JsonSerializer.Serialize(task.CustomFields)"
+                                    data-planned-value="@task.PlannedValue"
                                     data-is-blocked="@task.IsBlocked.ToString().ToLowerInvariant()"
                                     data-blocker-reason="@task.BlockerReason" data-collaborators="@string.Join(",", collaboratorIds)"
                                     onclick="openTaskDetailsModal(this)">Editar</button>

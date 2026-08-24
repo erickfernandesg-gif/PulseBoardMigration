@@ -1,10 +1,12 @@
 document.addEventListener('DOMContentLoaded', () => {
     initTabs();
+    initTaskDetailTabs();
     initDragAndDrop();
     initAjaxForms();
     initTaskFormRules();
     initFilters();
     initGanttControls();
+    restoreTaskDetailsAfterReload();
 });
 
 function antiforgeryToken() {
@@ -230,10 +232,14 @@ function initAjaxForms() {
         form.addEventListener('submit', async event => {
             event.preventDefault();
             clearFormError(form);
-            if (!validateTaskForm(form)) return;
+            if (!validateOperationForm(form)) return;
 
             const button = form.querySelector('button[type="submit"]');
-            if (button) button.disabled = true;
+            const originalButtonText = button?.textContent;
+            if (button) {
+                button.disabled = true;
+                if (form.id === 'commentForm') button.textContent = 'Enviando...';
+            }
             try {
                 const response = await fetch(form.action, { method: 'POST', body: new FormData(form) });
                 const contentType = response.headers.get('content-type') || '';
@@ -243,16 +249,40 @@ function initAjaxForms() {
                 if (!response.ok || !result.success) {
                     throw new Error(result.message || 'Operação não concluída.');
                 }
+                rememberTaskDetails(form, result.message);
                 window.location.reload();
             } catch (error) {
                 showFormError(form, error.message || 'Erro de comunicação.');
-                if (button) button.disabled = false;
+                if (button) {
+                    button.disabled = false;
+                    button.textContent = originalButtonText;
+                }
             }
         });
     });
 }
 
-function validateTaskForm(form) {
+function validateOperationForm(form) {
+    if (form.id === 'commentForm') {
+        const content = form.elements.namedItem('content')?.value.trim();
+        const images = [...(form.elements.namedItem('images')?.files || [])];
+        if (!content && images.length === 0) {
+            showFormError(form, 'Escreva uma mensagem ou anexe pelo menos uma imagem.');
+            form.elements.namedItem('content')?.focus();
+            return false;
+        }
+        if (images.length > 4) {
+            showFormError(form, 'Selecione no máximo 4 imagens.');
+            return false;
+        }
+        const oversized = images.find(image => image.size > 8 * 1024 * 1024);
+        if (oversized) {
+            showFormError(form, `A imagem “${oversized.name}” ultrapassa 8 MB.`);
+            return false;
+        }
+        return true;
+    }
+
     if (form.id !== 'createTaskForm' && form.id !== 'editTaskForm') return true;
 
     const startDate = form.elements.namedItem('startDate')?.value;
@@ -278,7 +308,8 @@ function formErrorElement(form) {
     if (form.id === 'createTaskForm') return document.getElementById('createTaskError');
     if (form.id === 'editTaskForm') return document.getElementById('editTaskError');
     if (form.id === 'handoffTaskForm') return document.getElementById('handoffTaskError');
-    return null;
+    if (form.id === 'commentForm') return document.getElementById('commentFormError');
+    return form.querySelector('[data-form-error]');
 }
 
 function clearFormError(form) {
@@ -289,10 +320,17 @@ function clearFormError(form) {
 }
 
 function showFormError(form, message) {
-    const errorElement = formErrorElement(form);
+    let errorElement = formErrorElement(form);
     if (!errorElement) {
-        alert(message);
-        return;
+        if (form.id === 'deleteTaskForm') {
+            alert(message);
+            return;
+        }
+        errorElement = document.createElement('div');
+        errorElement.dataset.formError = 'true';
+        errorElement.setAttribute('role', 'alert');
+        errorElement.className = 'rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700';
+        form.prepend(errorElement);
     }
     errorElement.textContent = message;
     errorElement.classList.remove('hidden');
@@ -339,6 +377,61 @@ function initTaskFormRules() {
     });
 }
 
+function initTaskDetailTabs() {
+    document.querySelectorAll('[data-task-tab]').forEach(button => {
+        button.addEventListener('click', () => selectTaskDetailsTab(button.dataset.taskTab));
+    });
+}
+
+function selectTaskDetailsTab(tabName = 'summary') {
+    document.querySelectorAll('[data-task-panel]').forEach(panel =>
+        panel.classList.toggle('hidden', panel.dataset.taskPanel !== tabName));
+    document.querySelectorAll('[data-task-tab]').forEach(button => {
+        const active = button.dataset.taskTab === tabName;
+        button.classList.toggle('bg-white', active);
+        button.classList.toggle('shadow-sm', active);
+        button.classList.toggle('text-indigo-700', active);
+        button.classList.toggle('text-slate-600', !active);
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+}
+
+function rememberTaskDetails(form, serverMessage) {
+    const activityForms = ['commentForm', 'checklistForm', 'timeLogForm', 'subtaskForm', 'taskFileForm'];
+    const workflowForms = ['dependencyForm', 'returnQuestionForm', 'handoffTaskForm'];
+    const taskId = form.elements.namedItem('taskId')?.value || form.elements.namedItem('parentTaskId')?.value;
+    if (!taskId || (!activityForms.includes(form.id) && !workflowForms.includes(form.id) && form.id !== 'editTaskForm')) return;
+    sessionStorage.setItem('boards.reopenTask', JSON.stringify({
+        taskId,
+        tab: activityForms.includes(form.id) ? 'activity' : workflowForms.includes(form.id) ? 'workflow' : 'summary',
+        status: serverMessage || (form.id === 'commentForm' ? 'Mensagem enviada e registrada no histórico.' : '')
+    }));
+}
+
+function restoreTaskDetailsAfterReload() {
+    const raw = sessionStorage.getItem('boards.reopenTask');
+    if (!raw) return;
+    sessionStorage.removeItem('boards.reopenTask');
+    try {
+        const state = JSON.parse(raw);
+        const taskElement = [...document.querySelectorAll('[data-task-id]')]
+            .find(element => element.dataset.taskId === state.taskId && element.dataset.title !== undefined);
+        if (!taskElement) return;
+        openTaskDetailsModal(taskElement);
+        selectTaskDetailsTab(state.tab || 'summary');
+        if (state.status) {
+            const status = document.getElementById('commentFormStatus');
+            if (status) {
+                status.textContent = state.status;
+                status.classList.remove('hidden');
+                status.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+    } catch {
+        sessionStorage.removeItem('boards.reopenTask');
+    }
+}
+
 function renderChatImagePreview(files) {
     const preview = document.getElementById('chatImagePreview');
     if (!preview) return;
@@ -365,19 +458,33 @@ function renderChatImagePreview(files) {
 function initFilters() {
     const month = document.getElementById('filterMonth');
     const user = document.getElementById('filterUser');
+    const matchesFilters = item => {
+        const monthOk = !month?.value ||
+            (month.value === 'inbox' ? !item.dataset.targetMonth : item.dataset.targetMonth === month.value);
+        const userOk = !user?.value || item.dataset.assignedTo === user.value ||
+            (item.dataset.collaborators || '').split(',').includes(user.value);
+        return monthOk && userOk;
+    };
     const apply = () => {
         document.querySelectorAll('.kanban-task, .task-filter-row').forEach(item => {
-            const monthOk = !month?.value ||
-                (month.value === 'inbox' ? !item.dataset.targetMonth : item.dataset.targetMonth === month.value);
-            const userOk = !user?.value || item.dataset.assignedTo === user.value ||
-                (item.dataset.collaborators || '').split(',').includes(user.value);
-            item.classList.toggle('hidden', !(monthOk && userOk));
+            item.classList.toggle('hidden', !matchesFilters(item));
+        });
+        const tasks = [...document.querySelectorAll('[data-task-metric]')].filter(matchesFilters);
+        const setText = (id, value) => { const element = document.getElementById(id); if (element) element.textContent = value; };
+        setText('filteredTotal', String(tasks.length));
+        setText('filteredDone', String(tasks.filter(item => item.dataset.status === 'done').length));
+        setText('filteredBlocked', String(tasks.filter(item => item.dataset.isBlocked === 'true').length));
+        const minutes = tasks.reduce((total, item) => total + (Number.parseInt(item.dataset.loggedMinutes || '0', 10) || 0), 0);
+        setText('filteredHours', `${(minutes / 60).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}h`);
+        document.querySelectorAll('[data-column-count]').forEach(counter => {
+            counter.textContent = String(tasks.filter(item => item.dataset.status === counter.dataset.columnCount).length);
         });
     };
     month?.addEventListener('change', apply);
     user?.addEventListener('change', apply);
     month?.addEventListener('change', refreshVisibleGantt);
     user?.addEventListener('change', refreshVisibleGantt);
+    apply();
 }
 
 async function postForm(url, values) {
@@ -426,6 +533,18 @@ window.openTaskDetailsModal = element => {
     const handoffForm = document.getElementById('handoffTaskForm');
     handoffForm?.reset();
     if (handoffForm) clearFormError(handoffForm);
+    ['dependencyForm', 'returnQuestionForm', 'checklistForm', 'timeLogForm', 'subtaskForm', 'taskFileForm']
+        .forEach(formId => {
+            const operationForm = document.getElementById(formId);
+            operationForm?.reset();
+            if (operationForm) clearFormError(operationForm);
+        });
+    const commentForm = document.getElementById('commentForm');
+    commentForm?.reset();
+    if (commentForm) clearFormError(commentForm);
+    document.getElementById('commentFormStatus')?.classList.add('hidden');
+    const detailsTitle = document.getElementById('taskDetailsTitle');
+    if (detailsTitle) detailsTitle.textContent = get('title') || 'Consulte o planejamento, converse e registre a execução.';
     document.getElementById('EditTaskId').value = taskId;
     document.getElementById('EditExpectedVersion').value = get('rowVersion');
     document.getElementById('EditTitle').value = get('title');
@@ -443,7 +562,6 @@ window.openTaskDetailsModal = element => {
     document.getElementById('EditEstimatedMinutes').value = estimated % 60;
     document.getElementById('EditSlaMinutes').value = get('slaMinutes');
     document.getElementById('EditPlannedValue').value = get('plannedValue');
-    document.getElementById('EditCustomFields').value = get('customFields') || '{}';
     document.getElementById('EditIsBlocked').checked = get('isBlocked') === 'true';
     document.getElementById('EditBlockerReason').value = get('blockerReason');
     document.getElementById('EditBlockerReason').required = get('isBlocked') === 'true';
@@ -455,6 +573,25 @@ window.openTaskDetailsModal = element => {
         option.disabled = option.value === taskId;
         option.hidden = option.value === taskId;
     });
+    const replyTo = document.getElementById('CommentReplyTo');
+    if (replyTo) replyTo.value = '';
+    document.querySelectorAll('.comment-reply-option').forEach(option => {
+        const visible = option.dataset.taskId === taskId;
+        option.disabled = !visible;
+        option.hidden = !visible;
+    });
+    const mentionableUsers = new Set([
+        get('assignedTo'), get('accountableOwnerId'), get('createdBy'), get('boardOwnerId'),
+        ...get('collaborators').split(',')
+    ].filter(userId => userId && userId !== get('currentUserId')));
+    let visibleMentionCount = 0;
+    document.querySelectorAll('.comment-mention-option').forEach(label => {
+        const visible = mentionableUsers.has(label.dataset.userId);
+        label.classList.toggle('hidden', !visible);
+        label.querySelector('input').disabled = !visible;
+        if (visible) visibleMentionCount += 1;
+    });
+    document.getElementById('commentMentionEmpty')?.classList.toggle('hidden', visibleMentionCount > 0);
     const previousFile = document.getElementById('PreviousTaskFile');
     if (previousFile) previousFile.value = '';
     document.querySelectorAll('.task-file-version-option').forEach(option => {
@@ -465,6 +602,7 @@ window.openTaskDetailsModal = element => {
     renderChatImagePreview([]);
     const template = document.getElementById(`task-extra-${taskId}`);
     document.getElementById('taskExtraContent').innerHTML = template?.innerHTML || '';
+    selectTaskDetailsTab('summary');
     const modal = document.getElementById('taskDetailsModal');
     modal.classList.remove('hidden');
     modal.classList.add('flex');

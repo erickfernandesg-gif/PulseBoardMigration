@@ -2,13 +2,12 @@
 @{ ViewData["Title"] = "Importação assistida"; }
 <div class="mx-auto max-w-5xl">
     <a asp-action="Index" asp-route-id="@Model.BoardId" class="text-sm font-bold text-indigo-600">← Central de operações</a>
-    <h1 class="mt-3 text-2xl font-bold">Importar Monday ou Excel</h1>
-    <p class="text-sm text-slate-500">Envie a exportação do Monday ou uma planilha comum. Nada é gravado antes da confirmação do mapeamento.</p>
+    <h1 class="mt-3 text-2xl font-bold">Importar Excel ou CSV</h1>
+    <p class="text-sm text-slate-500">Envie uma planilha comum. Nada é gravado antes da confirmação do mapeamento.</p>
     @if (!Model.Rows.Any())
     {
         <form asp-action="PreviewImport" method="post" enctype="multipart/form-data" class="mt-6 space-y-4 rounded-2xl border bg-white p-6">
             <input type="hidden" name="boardId" value="@Model.BoardId"/>
-            <div><label class="label">Origem</label><select name="source" class="field"><option value="monday">Exportação do Monday</option><option value="excel">Excel / CSV</option></select></div>
             <div><label class="label">Arquivo .xlsx ou .csv (até 10 MB)</label><input name="file" type="file" accept=".xlsx,.csv" required class="field"/></div>
             <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-bold text-white">Analisar arquivo</button>
         </form>
@@ -17,7 +16,6 @@
     {
         <form asp-action="CommitImport" method="post" class="mt-6 rounded-2xl border bg-white p-6">
             <input type="hidden" name="boardId" value="@Model.BoardId"/>
-            <input type="hidden" name="source" value="@Model.Source"/>
             <textarea name="payload" class="hidden">@Model.Payload</textarea>
             <h2 class="font-bold">Mapeie as colunas</h2>
             <p class="mt-1 text-xs text-slate-500">Os status serão associados às etapas existentes do Board. Valores desconhecidos irão para a primeira etapa.</p>

@@ -80,7 +80,6 @@ public class AutomationEditorViewModel
 public class BoardImportPreviewViewModel
 {
     public Guid BoardId { get; set; }
-    public string Source { get; set; } = "excel";
     public List<string> Headers { get; set; } = [];
     public List<Dictionary<string, string>> Rows { get; set; } = [];
     public string Payload { get; set; } = string.Empty;

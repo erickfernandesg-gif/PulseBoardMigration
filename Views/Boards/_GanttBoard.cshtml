@@ -62,7 +62,8 @@
                 spentMinutes = task.TotalMinutesSpent
             };
         })
-        .OrderBy(task => task.start)
+        .OrderBy(task => task.end)
+        .ThenBy(task => task.start)
         .ThenBy(task => task.name)
         .ToList();
     var unplannedCount = Model.Tasks.Count(task => !task.StartDate.HasValue && !task.DueDate.HasValue);
@@ -118,8 +119,8 @@
                 }
             </select>
             <select id="ganttSort" class="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 outline-none focus:border-indigo-400">
+                <option value="end" selected>Ordenar por próximo prazo</option>
                 <option value="start">Ordenar por início</option>
-                <option value="end">Ordenar por prazo</option>
                 <option value="responsible">Ordenar por responsável</option>
                 <option value="name">Ordenar por nome</option>
             </select>
