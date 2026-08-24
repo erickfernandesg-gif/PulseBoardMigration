@@ -5,21 +5,18 @@ alter table public.tasks add column if not exists sla_due_at timestamptz;
 alter table public.tasks add column if not exists sla_level text;
 
 create table if not exists public.task_field_history(id uuid primary key default gen_random_uuid(),task_id uuid not null references public.tasks(id) on delete cascade,board_id uuid not null references public.boards(id) on delete cascade,changed_by uuid references public.profiles(id) on delete set null,field_name text not null,old_value jsonb,new_value jsonb,created_at timestamptz not null default now());
-create table if not exists public.intake_forms(id uuid primary key default gen_random_uuid(),board_id uuid not null references public.boards(id) on delete cascade,title text not null check(length(title) between 1 and 200),description text,public_token text not null unique check(length(public_token)=48),target_status text not null default 'backlog',default_priority text not null default 'medium' check(default_priority in('low','medium','high','critical')),require_email boolean not null default true,is_active boolean not null default true,created_by uuid not null references public.profiles(id),created_at timestamptz not null default now());
 create table if not exists public.task_approval_steps(id uuid primary key default gen_random_uuid(),task_id uuid not null references public.tasks(id) on delete cascade,sequence integer not null check(sequence>0),approver_id uuid not null references public.profiles(id),status text not null default 'waiting' check(status in('waiting','pending','approved','rejected','cancelled')),decision_by uuid references public.profiles(id),decision_note text,decided_at timestamptz,created_at timestamptz not null default now(),unique(task_id,sequence));
 create table if not exists public.approval_delegations(id uuid primary key default gen_random_uuid(),delegator_id uuid not null references public.profiles(id),substitute_id uuid not null references public.profiles(id),starts_on date not null,ends_on date not null,is_active boolean not null default true,created_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),check(delegator_id<>substitute_id and ends_on>=starts_on));
 create table if not exists public.task_field_mirrors(id uuid primary key default gen_random_uuid(),source_task_id uuid not null references public.tasks(id) on delete cascade,target_task_id uuid not null references public.tasks(id) on delete cascade,field_name text not null check(field_name in('status','priority','due_date','assigned_to')),is_active boolean not null default true,created_by uuid not null references public.profiles(id),created_at timestamptz not null default now(),check(source_task_id<>target_task_id),unique(source_task_id,target_task_id,field_name));
 
 create index if not exists field_history_task_idx on public.task_field_history(task_id,created_at desc);
 create index if not exists field_history_board_idx on public.task_field_history(board_id,created_at desc);
-create index if not exists intake_forms_board_idx on public.intake_forms(board_id);
 create index if not exists approval_steps_task_idx on public.task_approval_steps(task_id,sequence);
 create index if not exists approval_steps_pending_idx on public.task_approval_steps(approver_id) where status='pending';
 create index if not exists approval_delegations_idx on public.approval_delegations(delegator_id,starts_on,ends_on) where is_active;
 create index if not exists mirrors_source_idx on public.task_field_mirrors(source_task_id) where is_active;
 create index if not exists mirrors_target_idx on public.task_field_mirrors(target_task_id) where is_active;
 create index if not exists field_history_changed_by_idx on public.task_field_history(changed_by) where changed_by is not null;
-create index if not exists intake_forms_created_by_idx on public.intake_forms(created_by);
 create index if not exists approval_steps_approver_idx on public.task_approval_steps(approver_id);
 create index if not exists approval_steps_decision_by_idx on public.task_approval_steps(decision_by) where decision_by is not null;
 create index if not exists approval_delegations_substitute_idx on public.approval_delegations(substitute_id);
@@ -29,18 +26,11 @@ create index if not exists automations_board_idx on public.automations(board_id)
 create index if not exists tasks_sla_idx on public.tasks(sla_due_at) where archived_at is null and status<>'done' and sla_due_at is not null;
 
 alter table public.task_field_history enable row level security;
-alter table public.intake_forms enable row level security;
 alter table public.task_approval_steps enable row level security;
 alter table public.approval_delegations enable row level security;
 alter table public.task_field_mirrors enable row level security;
 drop policy if exists field_history_read on public.task_field_history;
 create policy field_history_read on public.task_field_history for select to authenticated using(private.can_read_task(task_id));
-drop policy if exists intake_forms_manage on public.intake_forms;
-drop policy if exists intake_forms_insert on public.intake_forms;drop policy if exists intake_forms_update on public.intake_forms;drop policy if exists intake_forms_delete on public.intake_forms;
-create policy intake_forms_manage on public.intake_forms for select to authenticated using(private.can_edit_board(board_id));
-create policy intake_forms_insert on public.intake_forms for insert to authenticated with check(private.can_edit_board(board_id));
-create policy intake_forms_update on public.intake_forms for update to authenticated using(private.can_edit_board(board_id)) with check(private.can_edit_board(board_id));
-create policy intake_forms_delete on public.intake_forms for delete to authenticated using(private.can_edit_board(board_id));
 drop policy if exists approval_steps_read on public.task_approval_steps;
 create policy approval_steps_read on public.task_approval_steps for select to authenticated using(private.can_read_task(task_id));
 drop policy if exists approval_steps_manage on public.task_approval_steps;
@@ -63,8 +53,8 @@ create policy mirrors_insert on public.task_field_mirrors for insert to authenti
 create policy mirrors_update on public.task_field_mirrors for update to authenticated using(private.can_edit_task(source_task_id) and private.can_edit_task(target_task_id)) with check(private.can_edit_task(source_task_id) and private.can_edit_task(target_task_id));
 create policy mirrors_delete on public.task_field_mirrors for delete to authenticated using(private.can_edit_task(source_task_id) and private.can_edit_task(target_task_id));
 grant select on public.task_field_history to authenticated;
-grant select,insert,update,delete on public.intake_forms,public.task_approval_steps,public.approval_delegations,public.task_field_mirrors to authenticated;
-grant select,insert,update,delete on public.intake_forms,public.task_approval_steps,public.approval_delegations,public.task_field_mirrors,public.task_field_history to service_role;
+grant select,insert,update,delete on public.task_approval_steps,public.approval_delegations,public.task_field_mirrors to authenticated;
+grant select,insert,update,delete on public.task_approval_steps,public.approval_delegations,public.task_field_mirrors,public.task_field_history to service_role;
 
 create or replace function private.audit_task_fields() returns trigger language plpgsql security definer set search_path='' as $$
 declare f text;o jsonb:=to_jsonb(old);n jsonb:=to_jsonb(new);
@@ -186,7 +176,7 @@ create or replace function public.execute_task_automations() returns trigger lan
 declare r record;target uuid;days integer;
 begin
  if pg_trigger_depth()>1 then return new;end if;
- for r in select * from public.automations a where a.is_active and (a.board_id is null or a.board_id=new.board_id) and ((a.trigger_type='status_change' and new.status is distinct from old.status and a.trigger_value=new.status) or (a.trigger_type='priority_change' and new.priority is distinct from old.priority and a.trigger_value=new.priority) or (a.trigger_type='assignment_change' and new.assigned_to is distinct from old.assigned_to)) loop
+ for r in select * from public.automations a where a.is_active and a.board_id=new.board_id and ((a.trigger_type='status_change' and new.status is distinct from old.status and a.trigger_value=new.status) or (a.trigger_type='priority_change' and new.priority is distinct from old.priority and a.trigger_value=new.priority) or (a.trigger_type='assignment_change' and new.assigned_to is distinct from old.assigned_to and a.trigger_value='any')) loop
   if r.action_type='assign_user' then begin target:=r.action_payload::uuid;new.assigned_to=target;exception when invalid_text_representation then null;end;
   elsif r.action_type='move_status' then new.status=r.action_payload;
   elsif r.action_type='set_priority' and r.action_payload in('low','medium','high','critical') then new.priority=r.action_payload;

@@ -3,19 +3,20 @@
 <aside id="mobileSidebar" class="fixed inset-y-0 left-0 z-50 flex w-72 -translate-x-full flex-col bg-white p-4 shadow-2xl transition-transform md:hidden">
     <div class="mb-5 flex items-center justify-between"><strong class="text-xl">PulseBoard</strong><button id="closeMobileMenuBtn">✕</button></div>
     <nav class="space-y-1 text-sm font-semibold">
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Dashboard">Dashboard</a>
+        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Dashboard">Início</a>
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Work">Meu trabalho</a>
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Boards">Quadros</a>
-        @if(canManageMobile){<a class="block rounded-lg p-3 hover:bg-slate-50" href="/Management">Gestão da equipe</a>
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Schedule">Cronograma</a>
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Planning">Planejamento</a>
+        <p class="px-3 pt-3 text-[10px] font-bold tracking-wider text-slate-400">PROJETOS</p>
+        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Boards">Projetos</a>
+        @if(canManageMobile){<a class="block rounded-lg p-3 hover:bg-slate-50" href="/Schedule">Cronograma</a>
+        <p class="px-3 pt-3 text-[10px] font-bold tracking-wider text-slate-400">GESTÃO</p>
+        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Planning">Central de gestão</a>
+        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Management">Equipe</a>
+        <p class="px-3 pt-3 text-[10px] font-bold tracking-wider text-slate-400">FINANCEIRO</p>
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Billing">Faturamento</a>
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Executive">Painel executivo</a>
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Reports">Relatórios</a>}
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Forms">Formulários</a>
-        @if(canManageMobile){<a class="block rounded-lg p-3 hover:bg-slate-50" href="/Automations">Automações</a>
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Admin">Administração</a>}
-        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Settings">Configurações</a>
+        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Reports">Indicadores</a>}
+        <p class="px-3 pt-3 text-[10px] font-bold tracking-wider text-slate-400">CONFIGURAÇÕES</p>
+        @if(canManageMobile){<a class="block rounded-lg p-3 hover:bg-slate-50" href="/Admin">Organização</a>}
+        <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Settings">Meu perfil</a>
     </nav>
 </aside>
 <script>

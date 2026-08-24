@@ -13,7 +13,9 @@ Para uma instalação nova, execute na ordem:
 7. `notification_compatibility_fix.sql`
 8. `respond_assignment_notification_fix.sql`
 9. `task_assignment_trigger_fix.sql`
-10. `board_operations_suite.sql` — colunas/WIP, ações em massa, intake, auditoria por campo, aprovações, espelhos, dependências e SLA.
+10. `board_operations_suite.sql` — colunas/WIP, ações em massa, auditoria por campo, aprovações, espelhos, dependências e SLA.
+11. `remove_intake_forms.sql` — remove a estrutura legada de formulários públicos e seus dados.
+12. `automation_project_scope_upgrade.sql` — pausa regras globais legadas e aplica automações apenas ao projeto configurado.
 11. `board_operations_integration_fix.sql` — validação e integração de aprovações, substitutos, automações e ciclos de dependência.
 12. `import_monday_cronograma_2026.sql` e `finalize_monday_cronograma_2026.sql` — carga idempotente do cronograma corporativo exportado do Monday.
 13. `planning_workspace_upgrade.sql` — cockpit de planejamento, baseline transacional, dependências sem ciclos e recorrências idempotentes.

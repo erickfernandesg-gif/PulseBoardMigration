@@ -180,10 +180,10 @@ language plpgsql security definer set search_path='' as $$
 declare r record;target uuid;days integer;
 begin
  if pg_trigger_depth()>1 then return new;end if;
- for r in select * from public.automations a where a.is_active and (a.board_id is null or a.board_id=new.board_id)
+ for r in select * from public.automations a where a.is_active and a.board_id=new.board_id
    and ((a.trigger_type='status_change' and new.status is distinct from old.status and a.trigger_value=new.status)
      or (a.trigger_type='priority_change' and new.priority is distinct from old.priority and a.trigger_value=new.priority)
-     or (a.trigger_type='assignment_change' and new.assigned_to is distinct from old.assigned_to)) loop
+     or (a.trigger_type='assignment_change' and new.assigned_to is distinct from old.assigned_to and a.trigger_value='any')) loop
   if r.action_type='assign_user' then
    begin target:=r.action_payload::uuid;exception when invalid_text_representation then target:=null;end;
    if exists(select 1 from public.profiles p where p.id=target and p.is_active) then new.assigned_to=target;end if;

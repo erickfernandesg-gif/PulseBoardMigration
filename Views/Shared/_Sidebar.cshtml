@@ -1,21 +1,28 @@
 @{
     var path = Context.Request.Path.Value ?? "/";
     var canManage = User.IsInRole("admin") || User.IsInRole("manager");
-    var links = new[]
+    var groups = new[]
     {
-        ("/Dashboard", "layout-dashboard", "Dashboard", false),
-        ("/Work", "list-checks", "Meu trabalho", false),
-        ("/Boards", "kanban-square", "Quadros", false),
-        ("/Management", "users-round", "Gestão da equipe", true),
-        ("/Schedule", "calendar-range", "Cronograma", true),
-        ("/Planning", "network", "Planejamento", true),
-        ("/Billing", "badge-dollar-sign", "Faturamento", true),
-        ("/Executive", "chart-no-axes-combined", "Painel executivo", true),
-        ("/Reports", "file-chart-column", "Relatórios", true),
-        ("/Forms", "clipboard-list", "Formulários", false),
-        ("/Automations", "workflow", "Automações", true),
-        ("/Admin", "shield-check", "Administração", true),
-        ("/Settings", "settings", "Configurações", false)
+        ("", new[] {
+            ("/Dashboard", "house", "Início", false),
+            ("/Work", "list-checks", "Meu trabalho", false)
+        }),
+        ("PROJETOS", new[] {
+            ("/Boards", "kanban-square", "Projetos", false),
+            ("/Schedule", "calendar-range", "Cronograma", true)
+        }),
+        ("GESTÃO", new[] {
+            ("/Planning", "chart-no-axes-combined", "Central de gestão", true),
+            ("/Management", "users-round", "Equipe", true)
+        }),
+        ("FINANCEIRO", new[] {
+            ("/Billing", "badge-dollar-sign", "Faturamento", true),
+            ("/Reports", "file-chart-column", "Indicadores", true)
+        }),
+        ("CONFIGURAÇÕES", new[] {
+            ("/Admin", "building-2", "Organização", true),
+            ("/Settings", "settings", "Meu perfil", false)
+        })
     };
 }
 <aside id="desktopSidebar" class="relative hidden h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white md:flex">
@@ -24,13 +31,19 @@
         <strong class="sidebar-text text-lg">PulseBoard</strong>
         <button id="toggleSidebarBtn" class="ml-auto rounded-lg p-2 text-slate-400 hover:bg-slate-100"><i id="toggleIcon" data-lucide="panel-left-close" class="h-4 w-4"></i></button>
     </div>
-    <nav class="flex-1 space-y-1 overflow-y-auto p-3">
-        @foreach (var link in links.Where(link => !link.Item4 || canManage))
+    <nav class="flex-1 space-y-4 overflow-y-auto p-3">
+        @foreach (var group in groups)
         {
-            var active = path.StartsWith(link.Item1, StringComparison.OrdinalIgnoreCase);
-            <a href="@link.Item1" title="@link.Item3" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold @(active ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50")">
-                <i data-lucide="@link.Item2" class="h-5 w-5 shrink-0"></i><span class="sidebar-text">@link.Item3</span>
-            </a>
+            <section>
+                @if (!string.IsNullOrEmpty(group.Item1)) { <p class="sidebar-text mb-1 px-3 text-[10px] font-bold tracking-wider text-slate-400">@group.Item1</p> }
+                @foreach (var link in group.Item2.Where(link => !link.Item4 || canManage))
+                {
+                    var active = path.StartsWith(link.Item1, StringComparison.OrdinalIgnoreCase);
+                    <a href="@link.Item1" title="@link.Item3" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold @(active ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50")">
+                        <i data-lucide="@link.Item2" class="h-5 w-5 shrink-0"></i><span class="sidebar-text">@link.Item3</span>
+                    </a>
+                }
+            </section>
         }
     </nav>
     <div class="border-t border-slate-100 p-4 text-xs text-slate-500"><span class="sidebar-text truncate">@User.Identity?.Name</span></div>

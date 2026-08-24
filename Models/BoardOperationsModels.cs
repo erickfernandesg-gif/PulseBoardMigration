@@ -16,22 +16,6 @@ public class TaskFieldHistory : BaseModel
     [Column("created_at")] public DateTime CreatedAt { get; set; }
 }
 
-[Table("intake_forms")]
-public class IntakeFormDefinition : BaseModel
-{
-    [PrimaryKey("id", false)] public Guid Id { get; set; }
-    [Column("board_id")] public Guid BoardId { get; set; }
-    [Column("title")] public string Title { get; set; } = string.Empty;
-    [Column("description")] public string? Description { get; set; }
-    [Column("public_token")] public string PublicToken { get; set; } = string.Empty;
-    [Column("target_status")] public string TargetStatus { get; set; } = "backlog";
-    [Column("default_priority")] public string DefaultPriority { get; set; } = "medium";
-    [Column("require_email")] public bool RequireEmail { get; set; } = true;
-    [Column("is_active")] public bool IsActive { get; set; } = true;
-    [Column("created_by")] public Guid CreatedBy { get; set; }
-    [Column("created_at")] public DateTime CreatedAt { get; set; }
-}
-
 [Table("task_approval_steps")]
 public class TaskApprovalStep : BaseModel
 {
@@ -77,7 +61,6 @@ public class BoardOperationsViewModel
     public List<Board> Boards { get; set; } = [];
     public List<PulseTask> Tasks { get; set; } = [];
     public List<Profile> Profiles { get; set; } = [];
-    public List<IntakeFormDefinition> IntakeForms { get; set; } = [];
     public List<AutomationRule> Automations { get; set; } = [];
     public List<TaskApprovalStep> ApprovalSteps { get; set; } = [];
     public List<ApprovalDelegation> Delegations { get; set; } = [];
@@ -92,14 +75,6 @@ public class AutomationEditorViewModel
     public Board? Board { get; set; }
     public List<AutomationRule> Rules { get; set; } = [];
     public List<Profile> Profiles { get; set; } = [];
-}
-
-public class IntakePublicViewModel
-{
-    public string Token { get; set; } = string.Empty;
-    public string Title { get; set; } = string.Empty;
-    public string? Description { get; set; }
-    public bool RequireEmail { get; set; }
 }
 
 public class BoardImportPreviewViewModel

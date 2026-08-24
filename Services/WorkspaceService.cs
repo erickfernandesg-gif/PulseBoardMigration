@@ -99,9 +99,10 @@ public class WorkspaceService
 
     public async Task<AutomationEditorViewModel> GetAutomationEditorAsync(Guid? boardId)
     {
+        if (!boardId.HasValue) throw new InvalidOperationException("Selecione um projeto para configurar automações.");
         var client = await _clientFactory.CreateForCurrentUserAsync();
-        var board = boardId.HasValue ? await client.From<Board>().Where(x => x.Id == boardId.Value).Single() : null;
-        if (boardId.HasValue && board == null) throw new InvalidOperationException("Board não encontrado ou sem permissão.");
+        var board = await client.From<Board>().Where(x => x.Id == boardId.Value).Single();
+        if (board == null) throw new InvalidOperationException("Projeto não encontrado ou sem permissão.");
         var profiles = await client.From<Profile>().Where(x => x.IsActive == true).Get();
         return new AutomationEditorViewModel
         {
@@ -117,21 +118,21 @@ public class WorkspaceService
         var client = await _clientFactory.CreateForCurrentUserAsync();
         rule.Title = rule.Title?.Trim() ?? string.Empty;
         if (rule.Title.Length is < 1 or > 200) throw new InvalidOperationException("Informe um nome válido para a automação.");
+        if (!rule.BoardId.HasValue) throw new InvalidOperationException("As automações devem pertencer a um projeto.");
         var triggerTypes = new[] { "status_change", "priority_change", "assignment_change" };
         var actionTypes = new[] { "notify_manager", "assign_user", "move_status", "set_priority", "set_due_days" };
         if (!triggerTypes.Contains(rule.TriggerType)) throw new InvalidOperationException("Gatilho de automação inválido.");
         if (rule.ActionType == "assign_auto") rule.ActionType = "assign_user";
         if (!actionTypes.Contains(rule.ActionType)) throw new InvalidOperationException("Ação de automação inválida.");
 
-        Board? board = null;
-        if (rule.BoardId.HasValue)
-        {
-            board = await client.From<Board>().Where(x => x.Id == rule.BoardId.Value).Single()
-                ?? throw new InvalidOperationException("Board não encontrado ou sem permissão.");
-        }
-        if (rule.TriggerType == "status_change" && board != null && board.Settings.All(x => x.Id != rule.TriggerValue))
+        var board = await client.From<Board>().Where(x => x.Id == rule.BoardId.Value).Single()
+            ?? throw new InvalidOperationException("Projeto não encontrado ou sem permissão.");
+        if (rule.TriggerType == "status_change" && board.Settings.All(x => x.Id != rule.TriggerValue))
             throw new InvalidOperationException("A etapa usada no gatilho não existe neste Board.");
-        if (rule.ActionType == "move_status" && (board == null || board.Settings.All(x => x.Id != rule.ActionPayload)))
+        if (rule.TriggerType == "priority_change" && rule.TriggerValue is not ("low" or "medium" or "high" or "critical"))
+            throw new InvalidOperationException("Selecione uma prioridade válida para o gatilho.");
+        if (rule.TriggerType == "assignment_change") rule.TriggerValue = "any";
+        if (rule.ActionType == "move_status" && board.Settings.All(x => x.Id != rule.ActionPayload))
             throw new InvalidOperationException("Selecione uma etapa válida para a ação.");
         if (rule.ActionType == "set_priority" && rule.ActionPayload is not ("low" or "medium" or "high" or "critical"))
             throw new InvalidOperationException("Prioridade da automação inválida.");

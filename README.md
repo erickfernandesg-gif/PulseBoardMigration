@@ -71,7 +71,6 @@ Não exponha `Supabase__ServiceRoleKey` no navegador nem grave seu valor no Git.
 - Checklists, colaboradores e apontamentos de horas
 - Administração de usuários, equipes, clientes e custo/hora
 - Automações por mudança de status
-- Formulários públicos
 - Relatórios exportáveis
 - Painel executivo de capacidade e custo
 - Meu trabalho com caixa de entrada, execução, espera e aceite

@@ -1,75 +1,87 @@
 @model PulseBoardMigration.Models.AutomationEditorViewModel
 @{
-    ViewData["Title"] = "Automações";
-    var statuses = Model.Board?.Settings ?? [];
+    ViewData["Title"] = "Regras automáticas";
+    var project = Model.Board!;
+    string Stage(string id) => project.Settings.FirstOrDefault(x => x.Id == id)?.Title ?? id;
+    string Person(string? id) => Guid.TryParse(id, out var personId)
+        ? Model.Profiles.FirstOrDefault(x => x.Id == personId)?.FullName ?? Model.Profiles.FirstOrDefault(x => x.Id == personId)?.Email ?? "pessoa selecionada"
+        : "pessoa selecionada";
+    string Priority(string value) => value switch { "low" => "baixa", "high" => "alta", "critical" => "crítica", _ => "média" };
+    string When(AutomationRule rule) => rule.TriggerType switch
+    {
+        "status_change" => $"a tarefa entrar em “{Stage(rule.TriggerValue)}”",
+        "priority_change" => $"a prioridade mudar para {Priority(rule.TriggerValue)}",
+        "assignment_change" => "o responsável da tarefa mudar",
+        _ => "uma tarefa mudar"
+    };
+    string Then(AutomationRule rule) => rule.ActionType switch
+    {
+        "notify_manager" => "avisar a pessoa responsável pelo projeto",
+        "assign_user" => $"atribuir para {Person(rule.ActionPayload)}",
+        "move_status" => $"mover para “{Stage(rule.ActionPayload ?? string.Empty)}”",
+        "set_priority" => $"definir prioridade {Priority(rule.ActionPayload ?? "medium")}",
+        "set_due_days" => $"definir prazo para daqui a {rule.ActionPayload} dia(s)",
+        _ => "executar uma ação"
+    };
 }
-<div class="mb-8 flex flex-wrap items-end justify-between gap-3">
-    <div>
-        @if (Model.Board != null)
-        {
-            <a asp-controller="BoardOperations" asp-action="Index" asp-route-id="@Model.Board.Id" class="text-sm font-bold text-indigo-600">← Central de operações</a>
-        }
-        <h1 class="mt-2 text-2xl font-bold">Automações</h1>
-        <p class="text-sm text-slate-500">Regras SE/ENTÃO @(Model.Board == null ? "globais" : $"do Board {Model.Board.Name}").</p>
-    </div>
+<div class="mb-7">
+    <a asp-controller="BoardOperations" asp-action="Index" asp-route-id="@project.Id" class="text-sm font-bold text-indigo-600">← Voltar às operações do projeto</a>
+    <p class="mt-5 text-xs font-bold uppercase tracking-widest text-indigo-600">@project.Name</p>
+    <h1 class="mt-1 text-3xl font-bold">Regras automáticas</h1>
+    <p class="mt-1 max-w-2xl text-sm text-slate-500">Crie uma regra apenas quando a mesma ação sempre deve acontecer do mesmo jeito. As regras deste projeto não afetam os demais.</p>
 </div>
-<div class="grid gap-6 lg:grid-cols-3">
-    <form asp-action="Save" method="post" class="space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
-        <h2 class="text-lg font-bold">Nova regra</h2>
-        <input type="hidden" name="BoardId" value="@Model.BoardId" />
-        <div><label class="label">Nome</label><input name="Title" required maxlength="200" class="field" /></div>
-        <div>
-            <label class="label">Quando</label>
-            <select id="automationTrigger" name="TriggerType" class="field">
-                <option value="status_change">Status mudar</option>
-                <option value="priority_change">Prioridade mudar</option>
-                <option value="assignment_change">Responsável mudar</option>
-            </select>
+
+<section class="mb-7 rounded-2xl border border-indigo-100 bg-indigo-50 p-5">
+    <h2 class="font-bold text-indigo-950">Como funciona</h2>
+    <p class="mt-1 text-sm text-indigo-800">Escolha uma mudança na tarefa e o que deve acontecer depois. Exemplo: <strong>quando entrar em Concluído, mover para Validação.</strong></p>
+</section>
+
+<div class="grid gap-6 xl:grid-cols-[minmax(0,420px)_1fr]">
+    <form asp-action="Save" method="post" class="space-y-5 rounded-2xl border border-slate-200 bg-white p-6">
+        <div><h2 class="text-lg font-bold">Nova regra</h2><p class="mt-1 text-sm text-slate-500">Preencha os três passos abaixo.</p></div>
+        <input type="hidden" name="BoardId" value="@project.Id" />
+        <div><label class="label">Nome da regra</label><input name="Title" required maxlength="200" class="field" placeholder="Ex.: Enviar concluídas para validação" /></div>
+        <div class="rounded-xl bg-slate-50 p-4">
+            <p class="mb-3 text-sm font-bold">1. Quando isto acontecer</p>
+            <select id="automationTrigger" name="TriggerType" class="field"><option value="status_change">A tarefa entrar em uma etapa</option><option value="priority_change">A prioridade mudar</option><option value="assignment_change">O responsável mudar</option></select>
+            <div class="mt-3" data-trigger-value="status_change"><label class="label">Etapa</label><select name="TriggerValue" class="field">@foreach (var status in project.Settings) { <option value="@status.Id">@status.Title</option> }</select></div>
+            <div class="mt-3 hidden" data-trigger-value="priority_change"><label class="label">Nova prioridade</label><select name="TriggerValue" class="field" disabled><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option><option value="critical">Crítica</option></select></div>
+            <input type="hidden" name="TriggerValue" value="any" disabled data-trigger-value="assignment_change" />
         </div>
-        <div><label class="label">Valor do gatilho</label><input name="TriggerValue" required list="statusValues" class="field" placeholder="Etapa ou valor esperado" /></div>
-        <div>
-            <label class="label">Executar</label>
-            <select id="automationAction" name="ActionType" class="field">
-                <option value="notify_manager">Notificar gestor</option>
-                <option value="assign_user">Atribuir usuário</option>
-                <option value="move_status">Mover para etapa</option>
-                <option value="set_priority">Alterar prioridade</option>
-                <option value="set_due_days">Definir prazo em dias</option>
-            </select>
+        <div class="rounded-xl bg-slate-50 p-4">
+            <p class="mb-3 text-sm font-bold">2. Então faça isto</p>
+            <select id="automationAction" name="ActionType" class="field"><option value="move_status">Mover para uma etapa</option><option value="assign_user">Atribuir para uma pessoa</option><option value="notify_manager">Avisar responsável pelo projeto</option><option value="set_priority">Alterar prioridade</option><option value="set_due_days">Definir prazo</option></select>
+            <div class="mt-3" data-action-value="move_status"><label class="label">Nova etapa</label><select name="ActionPayload" class="field">@foreach (var status in project.Settings) { <option value="@status.Id">@status.Title</option> }</select></div>
+            <div class="mt-3 hidden" data-action-value="assign_user"><label class="label">Pessoa responsável</label><select name="ActionPayload" class="field" disabled><option value="">Selecione uma pessoa</option>@foreach (var profile in Model.Profiles) { <option value="@profile.Id">@(profile.FullName ?? profile.Email)</option> }</select></div>
+            <div class="mt-3 hidden" data-action-value="set_priority"><label class="label">Nova prioridade</label><select name="ActionPayload" class="field" disabled><option value="low">Baixa</option><option value="medium">Média</option><option value="high">Alta</option><option value="critical">Crítica</option></select></div>
+            <div class="mt-3 hidden" data-action-value="set_due_days"><label class="label">Prazo em dias</label><input name="ActionPayload" type="number" min="0" max="3650" class="field" placeholder="Ex.: 3" disabled /><p class="mt-1 text-xs text-slate-500">O prazo será contado a partir de hoje.</p></div>
         </div>
-        <div id="automationPayloadGroup"><label class="label">Parâmetro da ação</label><input name="ActionPayload" list="automationValues" class="field" placeholder="Etapa, prioridade, dias ou UUID" /><p class="mt-1 text-[10px] text-slate-400">Para atribuição, selecione o UUID de um usuário ativo.</p></div>
+        <div class="rounded-xl border border-dashed border-slate-300 p-4 text-sm text-slate-600"><strong>Resumo:</strong> <span id="rulePreview">quando a tarefa entrar em uma etapa, mover para uma etapa.</span></div>
         <input type="hidden" name="IsActive" value="true" />
-        <button class="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-bold text-white">Criar automação</button>
+        <button class="w-full rounded-lg bg-indigo-600 py-2.5 text-sm font-bold text-white">Salvar regra automática</button>
     </form>
-    <section class="space-y-3 lg:col-span-2">
+
+    <section class="space-y-3">
+        <div><h2 class="text-lg font-bold">Regras deste projeto</h2><p class="mt-1 text-sm text-slate-500">Pause uma regra para testar o processo sem excluí-la.</p></div>
         @if (!Model.Rules.Any())
-        {
-            <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-400">Nenhuma automação configurada para este escopo.</div>
-        }
+        { <div class="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center"><strong class="block text-slate-600">Nenhuma regra criada</strong><span class="mt-1 block text-sm text-slate-400">Use regras apenas para ações repetitivas e previsíveis.</span></div> }
         @foreach (var rule in Model.Rules)
         {
-            <article class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-5 sm:flex-row sm:items-center">
-                <div class="flex-1"><div class="flex items-center gap-2"><h3 class="font-bold">@rule.Title</h3><span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase @(rule.IsActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")">@(rule.IsActive ? "Ativa" : "Pausada")</span></div><p class="mt-2 text-sm text-slate-500">@rule.TriggerType = <strong>@rule.TriggerValue</strong> → <strong>@rule.ActionType</strong> @rule.ActionPayload</p></div>
-                <form asp-action="Toggle" method="post"><input type="hidden" name="id" value="@rule.Id"/><input type="hidden" name="active" value="@(!rule.IsActive)"/><input type="hidden" name="boardId" value="@Model.BoardId"/><button class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">@(rule.IsActive ? "Pausar" : "Ativar")</button></form>
-                <form asp-action="Delete" method="post" onsubmit="return confirm('Excluir automação?')"><input type="hidden" name="id" value="@rule.Id"/><input type="hidden" name="boardId" value="@Model.BoardId"/><button class="rounded-lg px-3 py-2 text-xs font-bold text-red-600">Excluir</button></form>
-            </article>
+            <article class="rounded-2xl border border-slate-200 bg-white p-5"><div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><div class="flex items-center gap-2"><h3 class="font-bold">@rule.Title</h3><span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase @(rule.IsActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")">@(rule.IsActive ? "Ativa" : "Pausada")</span></div><p class="mt-2 text-sm text-slate-600"><strong>Quando:</strong> @When(rule).</p><p class="mt-1 text-sm text-slate-600"><strong>Então:</strong> @Then(rule).</p></div><div class="flex shrink-0 gap-2"><form asp-action="Toggle" method="post"><input type="hidden" name="id" value="@rule.Id"/><input type="hidden" name="active" value="@(!rule.IsActive)"/><input type="hidden" name="boardId" value="@project.Id"/><button class="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold">@(rule.IsActive ? "Pausar" : "Ativar")</button></form><form asp-action="Delete" method="post" onsubmit="return confirm('Excluir esta regra automática?')"><input type="hidden" name="id" value="@rule.Id"/><input type="hidden" name="boardId" value="@project.Id"/><button class="rounded-lg px-3 py-2 text-xs font-bold text-red-600">Excluir</button></form></div></div></article>
         }
     </section>
 </div>
-<datalist id="statusValues">
-    @foreach (var status in statuses) { <option value="@status.Id">@status.Title</option> }
-    <option value="low">Prioridade baixa</option><option value="medium">Prioridade média</option><option value="high">Prioridade alta</option><option value="critical">Prioridade crítica</option>
-</datalist>
-<datalist id="automationValues">
-    @foreach (var status in statuses) { <option value="@status.Id">Etapa: @status.Title</option> }
-    @foreach (var profile in Model.Profiles) { <option value="@profile.Id">Usuário: @(profile.FullName ?? profile.Email)</option> }
-    <option value="low">Prioridade baixa</option><option value="medium">Prioridade média</option><option value="high">Prioridade alta</option><option value="critical">Prioridade crítica</option>
-</datalist>
 @section Scripts {
-    <script>
-        const action = document.getElementById('automationAction');
-        const payload = document.getElementById('automationPayloadGroup');
-        const syncPayload = () => payload?.classList.toggle('hidden', action?.value === 'notify_manager');
-        action?.addEventListener('change', syncPayload); syncPayload();
-    </script>
+<script>
+(() => {
+    const trigger = document.getElementById('automationTrigger'); const action = document.getElementById('automationAction'); const preview = document.getElementById('rulePreview');
+    const labels = { status_change: 'a tarefa entrar em uma etapa', priority_change: 'a prioridade mudar', assignment_change: 'o responsável mudar', move_status: 'mover para uma etapa', assign_user: 'atribuir para uma pessoa', notify_manager: 'avisar a pessoa responsável pelo projeto', set_priority: 'alterar prioridade', set_due_days: 'definir prazo' };
+    const sync = () => {
+        document.querySelectorAll('[data-trigger-value]').forEach(item => { const active = item.dataset.triggerValue === trigger.value; item.classList.toggle('hidden', !active); item.disabled = !active; item.querySelectorAll('select,input').forEach(control => control.disabled = !active); });
+        document.querySelectorAll('[data-action-value]').forEach(item => { const active = item.dataset.actionValue === action.value; item.classList.toggle('hidden', !active); item.querySelectorAll('select,input').forEach(control => control.disabled = !active); });
+        preview.textContent = `quando ${labels[trigger.value]}, ${labels[action.value]}.`;
+    };
+    trigger.addEventListener('change', sync); action.addEventListener('change', sync); sync();
+})();
+</script>
 }

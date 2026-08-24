@@ -44,30 +44,6 @@ public class BoardOperationsController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> CreateIntake(Guid boardId, string title, string? description,
-        string targetStatus, string priority, bool requireEmail)
-    {
-        if (!await CanManageBoardAsync(boardId)) return Forbid();
-        if (!UserId(out var userId)) return Unauthorized();
-        try
-        {
-            var token = await _service.CreateIntakeFormAsync(boardId, title, description, targetStatus, priority, requireEmail, userId);
-            TempData["Success"] = $"Formulário criado: {Url.Action("Form", "Intake", new { token }, Request.Scheme)}";
-        }
-        catch (Exception ex) { TempData["Error"] = ex.Message; }
-        return RedirectToAction(nameof(Index), new { id = boardId });
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> ToggleIntake(Guid boardId, Guid id, bool active)
-    {
-        if (!await CanManageBoardAsync(boardId)) return Forbid();
-        try { await _service.SetIntakeActiveAsync(id, active); TempData["Success"] = active ? "Formulário ativado." : "Formulário pausado."; }
-        catch (Exception ex) { TempData["Error"] = ex.Message; }
-        return RedirectToAction(nameof(Index), new { id = boardId });
-    }
-
-    [HttpPost]
     public async Task<IActionResult> AddApproval(Guid boardId, Guid taskId, int sequence, Guid approverId)
     {
         if (!await CanManageBoardAsync(boardId)) return Forbid();

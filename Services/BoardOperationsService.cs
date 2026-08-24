@@ -2,8 +2,6 @@ using ClosedXML.Excel;
 using Newtonsoft.Json;
 using PulseBoardMigration.Models;
 using System.Globalization;
-using System.Net.Mail;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace PulseBoardMigration.Services;
@@ -34,7 +32,6 @@ public class BoardOperationsService
         var boards = await client.From<Board>().Get();
         var tasks = await client.From<PulseTask>().Get();
         var profiles = await client.From<Profile>().Where(x => x.IsActive == true).Get();
-        var forms = await client.From<IntakeFormDefinition>().Where(x => x.BoardId == boardId).Get();
         var automations = await client.From<AutomationRule>().Where(x => x.BoardId == boardId).Get();
         var approvals = await client.From<TaskApprovalStep>().Get();
         var delegations = await client.From<ApprovalDelegation>().Get();
@@ -49,7 +46,6 @@ public class BoardOperationsService
             Boards = boards.Models.Where(x => x.Status != "archived").OrderBy(x => x.Name).ToList(),
             Tasks = tasks.Models.Where(x => x.ArchivedAt == null).OrderBy(x => x.Title).ToList(),
             Profiles = profiles.Models.OrderBy(x => x.FullName ?? x.Email).ToList(),
-            IntakeForms = forms.Models.OrderByDescending(x => x.CreatedAt).ToList(),
             Automations = automations.Models.OrderByDescending(x => x.CreatedAt).ToList(),
             ApprovalSteps = approvals.Models.Where(x => boardTaskIds.Contains(x.TaskId)).OrderBy(x => x.Sequence).ToList(),
             Delegations = delegations.Models.OrderByDescending(x => x.StartsOn).ToList(),
@@ -120,71 +116,6 @@ public class BoardOperationsService
             p_board_id = boardId, p_task_ids = ids, p_action = action,
             p_assigned_to = assignedTo, p_status = status, p_due_date = dueDate?.Date, p_priority = priority
         });
-    }
-
-    public async Task<string> CreateIntakeFormAsync(Guid boardId, string title, string? description,
-        string targetStatus, string priority, bool requireEmail, Guid userId)
-    {
-        title = title?.Trim() ?? string.Empty;
-        if (title.Length is < 1 or > 200) throw new InvalidOperationException("Informe um nome de formulário válido.");
-        if (priority is not ("low" or "medium" or "high" or "critical")) throw new InvalidOperationException("Prioridade inválida.");
-        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)).ToLowerInvariant();
-        var client = await _clientFactory.CreateForCurrentUserAsync();
-        var board = await client.From<Board>().Where(x => x.Id == boardId).Single()
-            ?? throw new InvalidOperationException("Quadro não encontrado ou sem permissão.");
-        if (board.Settings.All(x => x.Id != targetStatus)) throw new InvalidOperationException("A etapa de destino não existe neste Board.");
-        await client.From<IntakeFormDefinition>().Insert(new IntakeFormDefinition
-        {
-            BoardId = boardId, Title = title, Description = description?.Trim(), PublicToken = token,
-            TargetStatus = targetStatus, DefaultPriority = priority, RequireEmail = requireEmail,
-            CreatedBy = userId, CreatedAt = DateTime.UtcNow
-        });
-        return token;
-    }
-
-    public async Task SetIntakeActiveAsync(Guid id, bool active)
-    {
-        var client = await _clientFactory.CreateForCurrentUserAsync();
-        var response = await client.From<IntakeFormDefinition>().Where(x => x.Id == id).Set(x => x.IsActive, active).Update();
-        if (response.Models.Count == 0) throw new InvalidOperationException("Formulário não encontrado ou sem permissão.");
-    }
-
-    public async Task<IntakeFormDefinition?> GetPublicFormAsync(string token)
-    {
-        if (!ValidToken(token)) return null;
-        var client = _clientFactory.CreateServiceClient();
-        return await client.From<IntakeFormDefinition>().Where(x => x.PublicToken == token).Single();
-    }
-
-    public async Task<Guid> SubmitIntakeAsync(string token, string title, string? description,
-        string requesterName, string? requesterEmail)
-    {
-        var form = await GetPublicFormAsync(token);
-        if (form is not { IsActive: true }) throw new InvalidOperationException("Formulário indisponível.");
-        if (string.IsNullOrWhiteSpace(title) || title.Trim().Length > 200) throw new InvalidOperationException("Informe um título válido.");
-        requesterName = requesterName?.Trim() ?? string.Empty;
-        requesterEmail = requesterEmail?.Trim();
-        description = description?.Trim();
-        if (requesterName.Length is < 2 or > 120) throw new InvalidOperationException("Informe seu nome.");
-        if (description?.Length > 5000) throw new InvalidOperationException("Os detalhes devem ter no máximo 5.000 caracteres.");
-        if (form.RequireEmail && string.IsNullOrWhiteSpace(requesterEmail)) throw new InvalidOperationException("Informe seu e-mail.");
-        if (!string.IsNullOrWhiteSpace(requesterEmail))
-        {
-            try { _ = new MailAddress(requesterEmail); }
-            catch (FormatException) { throw new InvalidOperationException("Informe um e-mail válido."); }
-        }
-
-        var client = _clientFactory.CreateServiceClient();
-        var task = new PulseTask
-        {
-            Id = Guid.NewGuid(), BoardId = form.BoardId, Title = title.Trim(), Description = description,
-            Status = form.TargetStatus, Priority = form.DefaultPriority, CreatedBy = form.CreatedBy,
-            AccountableOwnerId = form.CreatedBy, WorkflowState = "waiting_external", CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow, StatusUpdatedAt = DateTime.UtcNow,
-            CustomFields = new() { ["requester_name"] = requesterName, ["requester_email"] = requesterEmail, ["intake_form_id"] = form.Id }
-        };
-        await client.From<PulseTask>().Insert(task);
-        return task.Id;
     }
 
     public async Task AddApprovalStepAsync(Guid taskId, int sequence, Guid approverId)
@@ -366,7 +297,6 @@ public class BoardOperationsService
     }
     private static string NormalizeImportedPriority(string value) => value.Trim().ToLowerInvariant() switch
     { "critical" or "crítica" => "critical", "high" or "alta" => "high", "low" or "baixa" => "low", _ => "medium" };
-    private static bool ValidToken(string value) => value.Length == 48 && value.All(Uri.IsHexDigit);
     private static bool IsHexColor(string value) => value.Length == 7 && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit);
     private static string NormalizeColumnId(string value, int index)
     {
