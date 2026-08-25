@@ -19,24 +19,6 @@ public class WorkspaceService
         _configuration = configuration;
     }
 
-    public async Task<DashboardViewModel> GetDashboardAsync(Guid currentUserId = default)
-    {
-        var client = await _clientFactory.CreateForCurrentUserAsync();
-        var boards = await client.From<Board>().Get();
-        var tasks = await client.From<PulseTask>().Get();
-        var comments = await client.From<TaskComment>().Get();
-        var profiles = await client.From<Profile>().Get();
-
-        return new DashboardViewModel
-        {
-            CurrentUserId = currentUserId,
-            Boards = boards.Models.OrderByDescending(b => b.CreatedAt).ToList(),
-            Tasks = tasks.Models.Where(x => x.ArchivedAt == null).ToList(),
-            RecentComments = comments.Models.OrderByDescending(c => c.CreatedAt).Take(10).ToList(),
-            Profiles = profiles.Models.ToList()
-        };
-    }
-
     public async Task<AdminViewModel> GetAdminAsync(Guid currentUserId)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();

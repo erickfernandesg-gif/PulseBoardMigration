@@ -292,6 +292,56 @@ public class MyWorkViewModel
     public List<Profile> Profiles { get; set; } = [];
     public List<TaskAssignment> Assignments { get; set; } = [];
     public List<TaskFollower> Followers { get; set; } = [];
+    public Profile? CurrentUser => Profiles.FirstOrDefault(x => x.Id == CurrentUserId);
+    public bool CanManage => CurrentUser?.Role is "admin" or "manager";
+    public IReadOnlyList<TaskAssignment> PendingAssignments => Assignments
+        .Where(x => x.ToUserId == CurrentUserId && x.Status == "pending")
+        .OrderBy(x => x.DueDate ?? DateTime.MaxValue)
+        .ThenBy(x => x.CreatedAt)
+        .ToList();
+    public IReadOnlyList<PulseTask> ReviewTasks => Tasks
+        .Where(x => x.Status != "done" && x.WorkflowState == "waiting_review" &&
+            (x.AssignedTo == CurrentUserId || x.AcceptanceBy == CurrentUserId))
+        .OrderBy(x => x.DueDate ?? DateTime.MaxValue)
+        .ToList();
+    public IReadOnlyList<PulseTask> ActiveTasks
+    {
+        get
+        {
+            var pendingTaskIds = PendingAssignments.Select(x => x.TaskId).ToHashSet();
+            return Tasks.Where(x => x.AssignedTo == CurrentUserId && x.Status != "done" &&
+                    (x.WorkflowState is "inbox" or "in_progress" or "changes_requested") &&
+                    !pendingTaskIds.Contains(x.Id))
+                .OrderBy(x => x.DueDate ?? x.StartDate ?? DateTime.MaxValue)
+                .ThenBy(x => x.Title)
+                .ToList();
+        }
+    }
+    public IReadOnlyList<PulseTask> UrgentTasks => ActiveTasks
+        .Where(x => x.IsBlocked || x.WorkflowState == "changes_requested" ||
+            (x.DueDate.HasValue && x.DueDate.Value.Date < DateTime.UtcNow.Date))
+        .ToList();
+    public IReadOnlyList<PulseTask> NextTasks
+    {
+        get
+        {
+            var urgentIds = UrgentTasks.Select(x => x.Id).ToHashSet();
+            return ActiveTasks.Where(x => !urgentIds.Contains(x.Id)).ToList();
+        }
+    }
+    public IReadOnlyList<PulseTask> WaitingTasks => Tasks
+        .Where(x => x.AssignedTo != CurrentUserId && x.Status != "done" &&
+            (x.AccountableOwnerId == CurrentUserId || Followers.Any(f => f.TaskId == x.Id)))
+        .OrderBy(x => x.DueDate ?? DateTime.MaxValue)
+        .ThenBy(x => x.Title)
+        .ToList();
+    public IReadOnlyList<PulseTask> RecentlyCompletedTasks => Tasks
+        .Where(x => x.Status == "done" && x.CompletedAt >= DateTime.UtcNow.Date.AddDays(-14) &&
+            (x.AssignedTo == CurrentUserId || x.AccountableOwnerId == CurrentUserId ||
+             Followers.Any(f => f.TaskId == x.Id)))
+        .OrderByDescending(x => x.CompletedAt)
+        .ToList();
+    public int AttentionCount => PendingAssignments.Count + ReviewTasks.Count + UrgentTasks.Count;
     public Board? Board(Guid id) => Boards.FirstOrDefault(x => x.Id == id);
     public Profile? Person(Guid? id) => id.HasValue ? Profiles.FirstOrDefault(x => x.Id == id) : null;
     public TaskAssignment? ActiveAssignment(Guid taskId) => Assignments

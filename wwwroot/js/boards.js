@@ -6,7 +6,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTaskFormRules();
     initFilters();
     initGanttControls();
-    restoreTaskDetailsAfterReload();
+    if (!restoreTaskDetailsAfterReload()) openTaskDetailsFromUrl();
 });
 
 function antiforgeryToken() {
@@ -410,13 +410,13 @@ function rememberTaskDetails(form, serverMessage) {
 
 function restoreTaskDetailsAfterReload() {
     const raw = sessionStorage.getItem('boards.reopenTask');
-    if (!raw) return;
+    if (!raw) return false;
     sessionStorage.removeItem('boards.reopenTask');
     try {
         const state = JSON.parse(raw);
         const taskElement = [...document.querySelectorAll('[data-task-id]')]
             .find(element => element.dataset.taskId === state.taskId && element.dataset.title !== undefined);
-        if (!taskElement) return;
+        if (!taskElement) return false;
         openTaskDetailsModal(taskElement);
         selectTaskDetailsTab(state.tab || 'summary');
         if (state.status) {
@@ -427,9 +427,24 @@ function restoreTaskDetailsAfterReload() {
                 status.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }
         }
+        return true;
     } catch {
         sessionStorage.removeItem('boards.reopenTask');
+        return false;
     }
+}
+
+function openTaskDetailsFromUrl() {
+    const parameters = new URLSearchParams(window.location.search);
+    const taskId = parameters.get('taskId');
+    if (!taskId) return false;
+    const taskElement = [...document.querySelectorAll('[data-task-id]')]
+        .find(element => element.dataset.taskId === taskId && element.dataset.title !== undefined);
+    if (!taskElement) return false;
+    openTaskDetailsModal(taskElement);
+    const requestedTab = parameters.get('tab');
+    selectTaskDetailsTab(['summary', 'activity', 'workflow'].includes(requestedTab) ? requestedTab : 'summary');
+    return true;
 }
 
 function renderChatImagePreview(files) {

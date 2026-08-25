@@ -22,7 +22,7 @@ public class AuthController : Controller
     {
         if (User.Identity?.IsAuthenticated == true)
         {
-            return RedirectToAction("Index", "Dashboard");
+            return RedirectToAction("Index", "Work");
         }
 
         ViewData["ReturnUrl"] = returnUrl;
@@ -68,7 +68,7 @@ public class AuthController : Controller
 
                 return Url.IsLocalUrl(returnUrl)
                     ? LocalRedirect(returnUrl!)
-                    : RedirectToAction("Index", "Dashboard");
+                    : RedirectToAction("Index", "Work");
             }
         }
         catch (UnauthorizedAccessException exception)

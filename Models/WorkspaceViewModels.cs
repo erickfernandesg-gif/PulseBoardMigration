@@ -1,22 +1,5 @@
 namespace PulseBoardMigration.Models;
 
-public class DashboardViewModel
-{
-    public Guid CurrentUserId { get; set; }
-    public List<Board> Boards { get; set; } = [];
-    public List<PulseTask> Tasks { get; set; } = [];
-    public List<TaskComment> RecentComments { get; set; } = [];
-    public List<Profile> Profiles { get; set; } = [];
-    public int ActiveBoards => Boards.Count(b => b.Status == "active");
-    public int OpenTasks => Tasks.Count(t => t.Status != "done");
-    public int OverdueTasks => Tasks.Count(t =>
-        t.Status != "done" && t.DueDate.HasValue && t.DueDate.Value.Date < DateTime.UtcNow.Date);
-    public int BlockedTasks => Tasks.Count(t => t.IsBlocked);
-    public int MyActiveTasks => Tasks.Count(t => t.AssignedTo == CurrentUserId && t.Status != "done");
-    public int WaitingOnOthers => Tasks.Count(t => t.AccountableOwnerId == CurrentUserId && t.AssignedTo != CurrentUserId && t.Status != "done");
-    public int WaitingMyReview => Tasks.Count(t => t.AssignedTo == CurrentUserId && t.WorkflowState == "waiting_review");
-}
-
 public class AdminViewModel
 {
     public List<Profile> Profiles { get; set; } = [];

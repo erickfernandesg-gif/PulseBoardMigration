@@ -13,10 +13,7 @@ namespace PulseBoardMigration.Controllers
             _logger = logger;
         }
 
-        public IActionResult Index()
-        {
-            return View();
-        }
+        public IActionResult Index() => RedirectToAction("Index", "Work");
 
         public IActionResult Privacy()
         {

@@ -82,6 +82,6 @@ app.MapHealthChecks("/health");
 
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Dashboard}/{action=Index}/{id?}");
+    pattern: "{controller=Work}/{action=Index}/{id?}");
 
 app.Run();
