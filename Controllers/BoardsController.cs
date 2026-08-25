@@ -117,8 +117,8 @@ public class BoardsController : Controller
         Guid? assignedTo,
         Guid? clientId,
         string? targetMonth,
-        int estimatedHours,
-        int estimatedMinutes,
+        int? estimatedHours,
+        int? estimatedMinutes,
         List<Guid>? collaboratorIds)
     {
         var validationError = ValidateTaskInput(
@@ -147,14 +147,13 @@ public class BoardsController : Controller
                 WorkflowState = assignedTo.HasValue ? "inbox" : "waiting_external",
                 ClientId = clientId,
                 TargetMonth = targetMonth,
-                EstimatedMinutes = checked(estimatedHours * 60 + estimatedMinutes)
+                EstimatedMinutes = ToEstimatedMinutes(estimatedHours, estimatedMinutes)
             }, collaboratorIds ?? []);
 
             return Json(new
             {
                 success = created != null,
-                message = created == null ? "Falha ao criar a tarefa." : null,
-                data = created
+                message = created == null ? "Falha ao criar a tarefa." : null
             });
         }
         catch (InvalidOperationException exception)
@@ -182,8 +181,8 @@ public class BoardsController : Controller
         Guid? assignedTo,
         Guid? clientId,
         string? targetMonth,
-        int estimatedHours,
-        int estimatedMinutes,
+        int? estimatedHours,
+        int? estimatedMinutes,
         int? slaMinutes,
         decimal? plannedValue,
         bool isBlocked,
@@ -220,7 +219,7 @@ public class BoardsController : Controller
                 AssignedTo = assignedTo,
                 ClientId = clientId,
                 TargetMonth = targetMonth,
-                EstimatedMinutes = checked(estimatedHours * 60 + estimatedMinutes),
+                EstimatedMinutes = ToEstimatedMinutes(estimatedHours, estimatedMinutes),
                 SlaMinutes = slaMinutes.HasValue ? Math.Max(0, slaMinutes.Value) : null,
                 PlannedValue = plannedValue.HasValue ? Math.Max(0, plannedValue.Value) : null,
                 IsBlocked = isBlocked,
@@ -230,8 +229,7 @@ public class BoardsController : Controller
             return Json(new
             {
                 success = updated != null,
-                message = updated == null ? "Tarefa não encontrada ou sem permissão para edição." : null,
-                data = updated
+                message = updated == null ? "Tarefa não encontrada ou sem permissão para edição." : null
             });
         }
         catch (InvalidOperationException exception)
@@ -517,8 +515,8 @@ public class BoardsController : Controller
         DateTime? startDate,
         DateTime? dueDate,
         string? targetMonth,
-        int estimatedHours,
-        int estimatedMinutes)
+        int? estimatedHours,
+        int? estimatedMinutes)
     {
         if (!ModelState.IsValid)
         {
@@ -560,4 +558,7 @@ public class BoardsController : Controller
 
         return null;
     }
+
+    private static int ToEstimatedMinutes(int? estimatedHours, int? estimatedMinutes) =>
+        checked((estimatedHours ?? 0) * 60 + (estimatedMinutes ?? 0));
 }

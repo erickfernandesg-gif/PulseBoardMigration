@@ -1,4 +1,5 @@
 using PulseBoardMigration.Models;
+using System.Text.Json;
 
 #pragma warning disable CS8603 // Postgrest Set<T?> expression trees report nullable false positives.
 namespace PulseBoardMigration.Services;
@@ -47,8 +48,16 @@ public class BoardService
             ]
         };
 
-        var response = await client.From<Board>().Insert(board);
-        return response.Models.FirstOrDefault();
+        try
+        {
+            var response = await client.From<Board>().Insert(board);
+            return response.Models.FirstOrDefault();
+        }
+        catch (Postgrest.Exceptions.PostgrestException exception)
+        {
+            throw new InvalidOperationException(PostgrestMessage(exception,
+                "Não foi possível criar o projeto. Confirme sua sessão e tente novamente."), exception);
+        }
     }
 
     public async Task<PulseTask?> CreateSubtaskAsync(Guid parentTaskId, Guid creatorId, string title,
@@ -251,18 +260,28 @@ public class BoardService
         }
 
         await EnsureBoardAndStatusAsync(client, task.BoardId, task.Status);
-        await client.Rpc("update_task_atomic", new
+        try
         {
-            p_task_id = task.Id, p_expected_version = task.RowVersion,
-            p_title = task.Title.Trim(), p_description = task.Description?.Trim(),
-            p_status = task.Status, p_priority = NormalizePriority(task.Priority), p_start_date = task.StartDate,
-            p_due_date = task.DueDate, p_assigned_to = task.AssignedTo, p_client_id = task.ClientId,
-            p_target_month = string.IsNullOrWhiteSpace(task.TargetMonth) ? null : task.TargetMonth.Trim(),
-            p_estimated_minutes = Math.Max(0, task.EstimatedMinutes), p_sla_minutes = task.SlaMinutes,
-            p_planned_value = task.PlannedValue, p_custom_fields = existingTask.CustomFields,
-            p_is_blocked = task.IsBlocked, p_blocker_reason = task.BlockerReason,
-            p_collaborator_ids = (collaboratorIds ?? []).Where(id => id != Guid.Empty).Distinct().ToArray()
-        });
+            await client.Rpc("update_task_atomic", new
+            {
+                // The board may have reordered cards after the page was rendered. Use the version
+                // read immediately before the RPC so position-only changes do not block form edits.
+                p_task_id = task.Id, p_expected_version = existingTask.RowVersion,
+                p_title = task.Title.Trim(), p_description = task.Description?.Trim(),
+                p_status = task.Status, p_priority = NormalizePriority(task.Priority), p_start_date = task.StartDate,
+                p_due_date = task.DueDate, p_assigned_to = task.AssignedTo, p_client_id = task.ClientId,
+                p_target_month = string.IsNullOrWhiteSpace(task.TargetMonth) ? null : task.TargetMonth.Trim(),
+                p_estimated_minutes = Math.Max(0, task.EstimatedMinutes), p_sla_minutes = task.SlaMinutes,
+                p_planned_value = task.PlannedValue, p_custom_fields = existingTask.CustomFields,
+                p_is_blocked = task.IsBlocked, p_blocker_reason = task.BlockerReason,
+                p_collaborator_ids = (collaboratorIds ?? []).Where(id => id != Guid.Empty).Distinct().ToArray()
+            });
+        }
+        catch (Postgrest.Exceptions.PostgrestException exception)
+        {
+            throw new InvalidOperationException(PostgrestMessage(exception,
+                "Não foi possível salvar as alterações da tarefa."), exception);
+        }
         return await client.From<PulseTask>().Where(existing => existing.Id == task.Id).Single();
     }
 
@@ -528,6 +547,23 @@ public class BoardService
     private static bool IsMissingChatAttachmentTable(Postgrest.Exceptions.PostgrestException exception) =>
         exception.Content?.Contains("\"code\":\"PGRST205\"", StringComparison.OrdinalIgnoreCase) == true &&
         exception.Content.Contains("task_comment_attachments", StringComparison.OrdinalIgnoreCase);
+
+    private static string PostgrestMessage(Postgrest.Exceptions.PostgrestException exception, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(exception.Content)) return fallback;
+        try
+        {
+            using var document = JsonDocument.Parse(exception.Content);
+            return document.RootElement.TryGetProperty("message", out var message) &&
+                   !string.IsNullOrWhiteSpace(message.GetString())
+                ? message.GetString()!
+                : fallback;
+        }
+        catch (JsonException)
+        {
+            return fallback;
+        }
+    }
 
     public async Task<TimeLog?> AddTimeLogAsync(TimeLog log)
     {

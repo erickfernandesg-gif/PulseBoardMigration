@@ -242,10 +242,12 @@ function initAjaxForms() {
             }
             try {
                 const response = await fetch(form.action, { method: 'POST', body: new FormData(form) });
-                const contentType = response.headers.get('content-type') || '';
-                const result = contentType.includes('application/json')
-                    ? await response.json()
-                    : { success: false, message: 'O servidor retornou uma resposta inválida.' };
+                let result;
+                try {
+                    result = await response.json();
+                } catch {
+                    result = { success: false, message: 'O servidor retornou uma resposta inválida.' };
+                }
                 if (!response.ok || !result.success) {
                     throw new Error(result.message || 'Operação não concluída.');
                 }
