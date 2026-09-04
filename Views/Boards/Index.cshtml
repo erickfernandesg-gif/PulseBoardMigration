@@ -1,5 +1,9 @@
 @model List<PulseBoardMigration.Models.Board>
-@{ ViewData["Title"] = "Projetos"; }
+@{
+    ViewData["Title"] = "Projetos";
+    string BoardStatusLabel(string value) => value switch { "active" => "Ativo", "paused" => "Pausado", "archived" => "Arquivado", _ => value };
+    string BoardHealthLabel(string value) => value switch { "on_track" => "No prazo", "at_risk" => "Em risco", "off_track" => "Atrasado", "on_hold" => "Em espera", _ => value };
+}
 <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
     <div><h1 class="text-2xl font-bold">Projetos</h1><p class="text-sm text-slate-500">Acompanhe projetos, tarefas e fluxo de trabalho.</p></div>
     <button onclick="openCreateBoardModal()" class="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white">+ Novo projeto</button>
@@ -14,7 +18,7 @@ else
         @foreach(var board in Model.Where(board => board.Status != "archived"))
         {
             <article data-searchable class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div class="flex items-start justify-between"><div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><i data-lucide="kanban-square"></i></div><div class="flex gap-1"><span class="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-500">@board.Status</span><span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase @(board.Health=="off_track"?"bg-red-100 text-red-700":board.Health=="at_risk"?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")">@board.Health</span></div></div>
+                <div class="flex items-start justify-between"><div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600"><i data-lucide="kanban-square"></i></div><div class="flex gap-1"><span class="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-500">@BoardStatusLabel(board.Status)</span><span class="rounded-full px-2 py-1 text-[10px] font-bold uppercase @(board.Health=="off_track"?"bg-red-100 text-red-700":board.Health=="at_risk"?"bg-amber-100 text-amber-700":"bg-emerald-100 text-emerald-700")">@BoardHealthLabel(board.Health)</span></div></div>
                 <a href="/Boards/Details/@board.Id" class="block"><h2 class="mt-4 text-lg font-bold hover:text-indigo-600">@board.Name</h2><p class="mt-2 line-clamp-2 min-h-10 text-sm text-slate-500">@board.Description</p></a>
                 <details class="mt-5 border-t border-slate-100 pt-4">
                     <summary class="cursor-pointer text-xs font-bold text-slate-500">Editar configurações</summary>

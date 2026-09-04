@@ -14,6 +14,7 @@
         $"/Boards/Details/{task.BoardId}?taskId={task.Id}&tab={tab}";
     string DueLabel(PulseTask task) => task.DueDate?.ToString("dd/MM/yyyy") ?? "Sem prazo";
     bool IsOverdue(PulseTask task) => task.DueDate.HasValue && task.DueDate.Value.Date < DateTime.UtcNow.Date;
+    string TaskStatusLabel(PulseTask task) => Model.Board(task.BoardId)?.Settings.FirstOrDefault(column => column.Id == task.Status)?.Title ?? task.Status;
 }
 
 <div class="mb-7 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -98,7 +99,7 @@ else
             @foreach (var task in next)
             {
                 var assignment = Model.ActiveAssignment(task.Id);
-                <article class="rounded-xl border border-slate-100 bg-slate-50 p-4"><div class="flex items-start justify-between gap-3"><div><p class="text-[10px] font-bold uppercase text-slate-400">@Model.Board(task.BoardId)?.Name · @task.Status</p><a href="@TaskUrl(task)" class="font-bold hover:text-indigo-600">@task.Title</a></div><span class="text-xs font-bold text-slate-500">@DueLabel(task)</span></div><div class="mt-3 flex items-center gap-2"><span class="text-xs text-slate-500">@(task.StartDate?.ToString("dd/MM") ?? "Sem início") → @(task.DueDate?.ToString("dd/MM") ?? "Sem prazo")</span><a href="@TaskUrl(task, "activity")" class="ml-auto text-xs font-bold text-indigo-600">Continuar</a>@if (assignment?.Status == "accepted") { <form asp-action="Respond" method="post"><input type="hidden" name="assignmentId" value="@assignment.Id"/><input type="hidden" name="action" value="complete"/><button class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white">Concluir etapa</button></form> }</div></article>
+                <article class="rounded-xl border border-slate-100 bg-slate-50 p-4"><div class="flex items-start justify-between gap-3"><div><p class="text-[10px] font-bold uppercase text-slate-400">@Model.Board(task.BoardId)?.Name · @TaskStatusLabel(task)</p><a href="@TaskUrl(task)" class="font-bold hover:text-indigo-600">@task.Title</a></div><span class="text-xs font-bold text-slate-500">@DueLabel(task)</span></div><div class="mt-3 flex items-center gap-2"><span class="text-xs text-slate-500">@(task.StartDate?.ToString("dd/MM") ?? "Sem início") → @(task.DueDate?.ToString("dd/MM") ?? "Sem prazo")</span><a href="@TaskUrl(task, "activity")" class="ml-auto text-xs font-bold text-indigo-600">Continuar</a>@if (assignment?.Status == "accepted") { <form asp-action="Respond" method="post"><input type="hidden" name="assignmentId" value="@assignment.Id"/><input type="hidden" name="action" value="complete"/><button class="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white">Concluir etapa</button></form> }</div></article>
             }
             @if (!next.Any()) { <p class="py-8 text-center text-sm text-slate-400 lg:col-span-2">Nenhuma próxima atividade planejada.</p> }
         </div>

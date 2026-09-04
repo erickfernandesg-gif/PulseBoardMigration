@@ -352,7 +352,7 @@ create policy time_logs_delete on public.time_logs for delete to authenticated u
 create policy activity_read on public.activity_log for select to authenticated using(true);
 create policy automations_manage on public.automations for all to authenticated using(public.is_manager()) with check(public.is_manager());
 
--- GestÃ£o de trabalho, handoffs, cronograma corporativo e faturamento
+-- Gestão de trabalho, handoffs, cronograma corporativo e faturamento
 alter table public.tasks add column if not exists accountable_owner_id uuid references public.profiles(id) on delete set null;
 alter table public.tasks add column if not exists created_by uuid references public.profiles(id) on delete set null;
 alter table public.tasks add column if not exists workflow_state text not null default 'inbox'
@@ -399,8 +399,8 @@ create table if not exists public.notifications (
   archived_at timestamptz,
   created_at timestamptz not null default now()
 );
--- Compatibilidade com instalaÃ§Ãµes que jÃ¡ possuÃ­am uma tabela notifications antiga.
--- CREATE TABLE IF NOT EXISTS nÃ£o adiciona colunas ausentes em tabelas existentes.
+-- Compatibilidade com instalações que já possuíam uma tabela notifications antiga.
+-- CREATE TABLE IF NOT EXISTS não adiciona colunas ausentes em tabelas existentes.
 alter table public.notifications add column if not exists recipient_id uuid references public.profiles(id) on delete cascade;
 alter table public.notifications add column if not exists actor_id uuid references public.profiles(id) on delete set null;
 alter table public.notifications add column if not exists task_id uuid references public.tasks(id) on delete cascade;
@@ -625,7 +625,7 @@ begin
       values(new.id,old.assigned_to,'previous_assignee') on conflict(task_id,user_id) do nothing;
     end if;
     insert into public.notifications(recipient_id,actor_id,task_id,board_id,type,title,message,action_url,priority,deduplication_key)
-    values(new.assigned_to,actor,new.id,new.board_id,'assignment_received','Nova tarefa atribuÃ­da',new.title,
+    values(new.assigned_to,actor,new.id,new.board_id,'assignment_received','Nova tarefa atribuída',new.title,
       '/Boards/Details/'||new.board_id::text,'high','assignment:'||new.id::text||':'||new.assigned_to::text||':'||new.updated_at::text)
     on conflict(deduplication_key) do nothing;
   end if;
@@ -648,7 +648,7 @@ begin
     ) involved where user_id is not null and user_id<>new.user_id
   loop
     insert into public.notifications(recipient_id,actor_id,task_id,board_id,type,title,message,action_url,deduplication_key)
-    values(recipient,new.user_id,new.task_id,target.board_id,'comment_added','Novo comentÃ¡rio',left(new.content,300),
+    values(recipient,new.user_id,new.task_id,target.board_id,'comment_added','Novo comentário',left(new.content,300),
       '/Boards/Details/'||target.board_id::text,'comment:'||new.id::text||':'||recipient::text)
     on conflict(deduplication_key) do nothing;
   end loop;
@@ -683,7 +683,7 @@ begin
     kind := case when item.due_date<now() then 'task_overdue' else 'task_due_soon' end;
     insert into public.notifications(recipient_id,task_id,board_id,type,title,message,action_url,priority,deduplication_key)
     values(auth.uid(),item.id,item.board_id,kind,
-      case when kind='task_overdue' then 'Tarefa atrasada' else 'Prazo prÃ³ximo' end,item.title,
+      case when kind='task_overdue' then 'Tarefa atrasada' else 'Prazo próximo' end,item.title,
       '/Boards/Details/'||item.board_id::text,case when kind='task_overdue' then 'critical' else 'high' end,
       kind||':'||item.id::text||':'||current_date::text)
     on conflict(deduplication_key) do nothing;
@@ -706,8 +706,8 @@ returns uuid language plpgsql security invoker set search_path=public as $$
 declare current_task public.tasks%rowtype; assignment_id uuid;
 begin
   select * into current_task from public.tasks where id=p_task_id for update;
-  if current_task.id is null then raise exception 'Tarefa nÃ£o encontrada'; end if;
-  if p_to_user_id is null then raise exception 'Novo executor obrigatÃ³rio'; end if;
+  if current_task.id is null then raise exception 'Tarefa não encontrada'; end if;
+  if p_to_user_id is null then raise exception 'Novo executor obrigatório'; end if;
 
   update public.task_assignments set status='completed',completed_at=now(),updated_at=now()
   where task_id=p_task_id and status in ('pending','accepted');
@@ -771,14 +771,14 @@ returns boolean language plpgsql security invoker set search_path=public as $$
 declare assignment public.task_assignments%rowtype; current_task public.tasks%rowtype;
 begin
   select * into assignment from public.task_assignments where id=p_assignment_id for update;
-  if assignment.id is null then raise exception 'AtribuiÃ§Ã£o nÃ£o encontrada'; end if;
-  if assignment.to_user_id<>auth.uid() and not public.can_manage_user(assignment.to_user_id) then raise exception 'Sem permissÃ£o'; end if;
+  if assignment.id is null then raise exception 'Atribuição não encontrada'; end if;
+  if assignment.to_user_id<>auth.uid() and not public.can_manage_user(assignment.to_user_id) then raise exception 'Sem permissão'; end if;
   select * into current_task from public.tasks where id=assignment.task_id for update;
 
   if p_action='accept' then
     if exists(select 1 from public.task_dependencies d join public.tasks prerequisite on prerequisite.id=d.depends_on_task_id
       where d.task_id=assignment.task_id and prerequisite.status<>'done') then
-      raise exception 'Existem dependÃªncias ainda nÃ£o concluÃ­das';
+      raise exception 'Existem dependências ainda não concluídas';
     end if;
     update public.task_assignments set status='accepted',accepted_at=now(),response_note=nullif(trim(p_note),''),updated_at=now() where id=p_assignment_id;
     update public.tasks set workflow_state='in_progress' where id=assignment.task_id;
@@ -799,7 +799,7 @@ begin
     else
       update public.tasks set workflow_state='done',status='done',completed_at=now() where id=assignment.task_id;
     end if;
-  else raise exception 'AÃ§Ã£o invÃ¡lida';
+  else raise exception 'Ação inválida';
   end if;
   insert into public.activity_log(task_id,board_id,user_id,action,details)
   values(assignment.task_id,current_task.board_id,auth.uid(),'assignment_'||p_action,
@@ -807,7 +807,7 @@ begin
   if assignment.assigned_by<>auth.uid() then
     insert into public.notifications(recipient_id,actor_id,task_id,board_id,type,title,message,action_url,deduplication_key)
     values(assignment.assigned_by,auth.uid(),assignment.task_id,current_task.board_id,'assignment_response',
-      case p_action when 'accept' then 'AtribuiÃ§Ã£o aceita' when 'reject' then 'AtribuiÃ§Ã£o recusada' else 'Etapa concluÃ­da' end,
+      case p_action when 'accept' then 'Atribuição aceita' when 'reject' then 'Atribuição recusada' else 'Etapa concluída' end,
       current_task.title,'/Boards/Details/'||current_task.board_id::text,
       'assignment-response:'||assignment.id::text||':'||p_action)
     on conflict(deduplication_key) do nothing;
@@ -820,20 +820,20 @@ returns boolean language plpgsql security invoker set search_path=public as $$
 declare current_task public.tasks%rowtype; previous_executor uuid;
 begin
   select * into current_task from public.tasks where id=p_task_id for update;
-  if current_task.id is null or current_task.workflow_state<>'waiting_review' then raise exception 'Tarefa nÃ£o aguarda revisÃ£o'; end if;
-  if current_task.acceptance_by<>auth.uid() and not public.can_manage_user(current_task.acceptance_by) then raise exception 'Sem permissÃ£o'; end if;
+  if current_task.id is null or current_task.workflow_state<>'waiting_review' then raise exception 'Tarefa não aguarda revisão'; end if;
+  if current_task.acceptance_by<>auth.uid() and not public.can_manage_user(current_task.acceptance_by) then raise exception 'Sem permissão'; end if;
   if p_action='approve' then
     update public.tasks set workflow_state='done',status='done',completed_at=now(),accepted_at=now() where id=p_task_id;
   elsif p_action='changes' then
     select to_user_id into previous_executor from public.task_assignments where task_id=p_task_id and status='completed' order by completed_at desc limit 1;
-    if previous_executor is null then raise exception 'Executor anterior nÃ£o encontrado'; end if;
+    if previous_executor is null then raise exception 'Executor anterior não encontrado'; end if;
     insert into public.task_assignments(task_id,from_user_id,to_user_id,assigned_by,stage,status,notes,due_date,estimated_minutes)
     values(p_task_id,auth.uid(),previous_executor,auth.uid(),current_task.status,'pending',nullif(trim(p_note),''),
       current_task.due_date,current_task.estimated_minutes);
     insert into public.task_comments(task_id,user_id,content,message_type,created_at)
     values(p_task_id,(select auth.uid()),trim(p_note),'question',now());
     update public.tasks set assigned_to=previous_executor,workflow_state='changes_requested',completed_at=null where id=p_task_id;
-  else raise exception 'AÃ§Ã£o invÃ¡lida'; end if;
+  else raise exception 'Ação inválida'; end if;
   insert into public.activity_log(task_id,board_id,user_id,action,details)
   values(p_task_id,current_task.board_id,auth.uid(),'task_reviewed',jsonb_build_object('result',p_action,'note',p_note));
   return true;
