@@ -82,7 +82,7 @@ public class BoardOperationsService
         var missingStatuses = activeTasks.Select(x => x.Status).Distinct(StringComparer.OrdinalIgnoreCase)
             .Where(status => settings.All(column => !string.Equals(column.Id, status, StringComparison.OrdinalIgnoreCase))).ToList();
         if (missingStatuses.Count > 0)
-            throw new InvalidOperationException($"Não é possível remover ou renomear etapas que possuem tarefas: {string.Join(", ", missingStatuses)}.");
+            throw new InvalidOperationException($"Não é possível remover etapas que possuem tarefas: {string.Join(", ", missingStatuses)}.");
         var exceeded = settings.FirstOrDefault(column => column.WipLimit.HasValue &&
             activeTasks.Count(task => string.Equals(task.Status, column.Id, StringComparison.OrdinalIgnoreCase)) > column.WipLimit.Value);
         if (exceeded != null)
@@ -169,6 +169,8 @@ public class BoardOperationsService
             ?? throw new InvalidOperationException("Tarefa de origem não encontrada.");
         var target = await client.From<PulseTask>().Where(x => x.Id == targetTaskId).Single()
             ?? throw new InvalidOperationException("Tarefa de destino não encontrada.");
+        if (source.BoardId == target.BoardId)
+            throw new InvalidOperationException("Use o espelhamento avançado apenas entre tarefas de projetos diferentes.");
         if (fieldName == "status" && source.BoardId != target.BoardId)
         {
             var sourceBoard = await client.From<Board>().Where(x => x.Id == source.BoardId).Single();

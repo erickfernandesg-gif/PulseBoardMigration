@@ -106,6 +106,26 @@ public class BoardsController : Controller
     }
 
     [HttpPost]
+    public async Task<IActionResult> PermanentlyDeleteBoard(Guid boardId, string confirmationName)
+    {
+        try
+        {
+            if (!TryUserId(out var userId)) return Unauthorized();
+            var deleted = await _boardService.PermanentlyDeleteBoardAsync(
+                boardId, confirmationName, userId, User.IsInRole("admin"));
+            TempData[deleted ? "Success" : "Error"] = deleted
+                ? "Projeto excluído definitivamente, incluindo suas tarefas e dados associados."
+                : "Projeto não encontrado ou sem permissão.";
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Exclusão definitiva rejeitada para o quadro {BoardId}", boardId);
+            TempData["Error"] = exception.Message;
+        }
+        return RedirectToAction(nameof(Index));
+    }
+
+    [HttpPost]
     public async Task<IActionResult> CreateTask(
         Guid boardId,
         string title,
@@ -336,9 +356,13 @@ public class BoardsController : Controller
         {
             if (title.Trim().Length > 200) throw new InvalidOperationException("O título deve ter no máximo 200 caracteres.");
             var task = await _boardService.CreateSubtaskAsync(parentTaskId, userId, title, assignedTo, dueDate, estimatedMinutes);
-            return Json(new { success = task != null, data = task });
+            return Json(new { success = task != null });
         }
-        catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Falha ao criar subtarefa para a tarefa principal {ParentTaskId}", parentTaskId);
+            return BadRequest(new { success = false, message = exception.Message });
+        }
     }
 
     [HttpPost]

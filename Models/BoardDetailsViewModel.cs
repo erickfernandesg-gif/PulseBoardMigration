@@ -17,6 +17,10 @@ public class BoardDetailsViewModel
     public List<ActivityLog> Activity { get; set; } = [];
     public List<TaskAssignment> Assignments { get; set; } = [];
     public List<TaskDependency> Dependencies { get; set; } = [];
+    // Pré-requisitos de outros projetos, carregados separadamente para que o
+    // detalhe da tarefa explique bloqueios externos sem misturá-los ao Kanban.
+    public List<PulseTask> ExternalDependencyTasks { get; set; } = [];
+    public List<Board> ExternalDependencyBoards { get; set; } = [];
     public List<TaskFile> Files { get; set; } = [];
     public List<TaskApprovalStep> ApprovalSteps { get; set; } = [];
     public List<ApprovalDelegation> ApprovalDelegations { get; set; } = [];
@@ -29,6 +33,12 @@ public class BoardDetailsViewModel
 
     public ClientAccount? Client(Guid? id) =>
         id.HasValue ? Clients.FirstOrDefault(c => c.Id == id.Value) : null;
+
+    public PulseTask? DependencyTask(Guid id) =>
+        Tasks.FirstOrDefault(task => task.Id == id) ?? ExternalDependencyTasks.FirstOrDefault(task => task.Id == id);
+
+    public Board? DependencyBoard(Guid id) =>
+        id == Board.Id ? Board : ExternalDependencyBoards.FirstOrDefault(board => board.Id == id);
 
     public bool CanDecide(TaskApprovalStep step) =>
         CanManageBoard || step.ApproverId == CurrentUserId || ApprovalDelegations.Any(delegation =>

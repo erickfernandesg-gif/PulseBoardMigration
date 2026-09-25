@@ -214,16 +214,39 @@
                 <div class="space-y-2">
                 @foreach (var dependency in Model.Dependencies.Where(d => d.TaskId == task.Id))
                 {
-                    var prerequisite = Model.Tasks.FirstOrDefault(candidate => candidate.Id == dependency.DependsOnTaskId);
+                    var prerequisite = Model.DependencyTask(dependency.DependsOnTaskId);
                     if (prerequisite == null) continue;
-                    <div class="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 text-xs"><span class="h-2 w-2 rounded-full @(prerequisite.Status == "done" ? "bg-emerald-500" : "bg-amber-500")"></span><span class="min-w-0 flex-1 truncate">@prerequisite.Title</span><span class="text-[10px] font-bold @(prerequisite.Status == "done" ? "text-emerald-600" : "text-amber-600")">@(prerequisite.Status == "done" ? "Concluída" : "Pendente")</span><button type="button" onclick="deleteDependency('@dependency.Id')" class="text-red-400" title="Remover dependência">×</button></div>
+                    var prerequisiteBoard = Model.DependencyBoard(prerequisite.BoardId);
+                    var isExternal = prerequisite.BoardId != Model.Board.Id;
+                    var isComplete = prerequisite.Status == "done" || prerequisite.ArchivedAt.HasValue;
+                    <div class="flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 p-2 text-xs"><span class="h-2 w-2 rounded-full @(isComplete ? "bg-emerald-500" : "bg-amber-500")"></span><span class="min-w-0 flex-1"><strong class="block truncate">@prerequisite.Title</strong>@if (isExternal) { <span class="block truncate text-[10px] text-slate-400">Projeto externo: @(prerequisiteBoard?.Name ?? "Projeto indisponível")</span> }</span><span class="text-[10px] font-bold @(isComplete ? "text-emerald-600" : "text-amber-600")">@(prerequisite.ArchivedAt.HasValue ? "Arquivada" : prerequisite.Status == "done" ? "Concluída" : "Pendente")</span><button type="button" onclick="deleteDependency('@dependency.Id')" class="text-red-400" title="Remover dependência">×</button></div>
                 }
                 @if (!Model.Dependencies.Any(d => d.TaskId == task.Id)){<p class="text-xs italic text-slate-400">Nenhum pré-requisito.</p>}
                 </div>
             </section>
             <section>
                 <h4 class="mb-3 text-xs font-bold uppercase text-slate-500">Subtarefas</h4>
-                <div class="space-y-2">@foreach(var child in Model.Tasks.Where(x=>x.ParentTaskId==task.Id)){<div class="rounded-lg bg-slate-50 p-2 text-xs"><span class="mr-2 inline-block h-2 w-2 rounded-full @(child.Status=="done"?"bg-emerald-500":"bg-indigo-500")"></span><strong>@child.Title</strong><span class="float-right text-slate-400">@TaskStatusLabel(child.Status)</span></div>}@if(!Model.Tasks.Any(x=>x.ParentTaskId==task.Id)){<p class="text-xs italic text-slate-400">Nenhuma subtarefa.</p>}</div>
+                <div class="space-y-2">
+                    @foreach (var child in Model.Tasks.Where(x => x.ParentTaskId == task.Id))
+                    {
+                        var childAssignee = Model.Profile(child.AssignedTo);
+                        <div class="rounded-lg border border-slate-100 bg-slate-50 p-3 text-xs">
+                            <div class="flex items-start justify-between gap-2">
+                                <div class="min-w-0"><span class="mr-2 inline-block h-2 w-2 rounded-full @(child.Status == "done" ? "bg-emerald-500" : "bg-indigo-500")"></span><strong class="break-words">@child.Title</strong></div>
+                                <span class="shrink-0 text-[10px] font-bold @(child.Status == "done" ? "text-emerald-600" : "text-slate-400")">@TaskStatusLabel(child.Status)</span>
+                            </div>
+                            <div class="mt-3 grid grid-cols-3 gap-2 border-t border-slate-200 pt-2 text-[10px] text-slate-500">
+                                <span><strong class="block uppercase text-slate-400">Responsável</strong>@(childAssignee?.FullName ?? childAssignee?.Email ?? "Sem responsável")</span>
+                                <span><strong class="block uppercase text-slate-400">Prazo</strong>@(child.DueDate?.ToString("dd/MM/yyyy") ?? "Sem prazo")</span>
+                                <span><strong class="block uppercase text-slate-400">Estimativa</strong>@(child.EstimatedMinutes > 0 ? $"{child.EstimatedMinutes / 60}h {child.EstimatedMinutes % 60}min" : "Não informada")</span>
+                            </div>
+                        </div>
+                    }
+                    @if (!Model.Tasks.Any(x => x.ParentTaskId == task.Id))
+                    {
+                        <p class="text-xs italic text-slate-400">Nenhuma subtarefa.</p>
+                    }
+                </div>
             </section>
             @if (Model.ApprovalSteps.Any(step => step.TaskId == task.Id))
             {

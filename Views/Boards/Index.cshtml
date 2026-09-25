@@ -30,6 +30,15 @@ else
                         <button class="w-full rounded-lg bg-slate-900 py-2 text-xs font-bold text-white">Salvar</button>
                     </form>
                     <form asp-action="DeleteBoard" method="post" class="mt-2" onsubmit="return confirm('Arquivar este quadro? Tarefas, horas e histórico serão preservados.')"><input type="hidden" name="boardId" value="@board.Id"/><button class="w-full rounded-lg py-2 text-xs font-bold text-red-600 hover:bg-red-50">Arquivar quadro</button></form>
+                    <details class="mt-3 border-t border-red-100 pt-3">
+                        <summary class="cursor-pointer text-xs font-bold text-red-700">Excluir definitivamente</summary>
+                        <p class="mt-2 text-xs text-slate-500">Remove o projeto, tarefas, conversas, anexos, horas, aprovações e dependências. Esta ação não pode ser desfeita.</p>
+                        <form asp-action="PermanentlyDeleteBoard" method="post" class="mt-3 space-y-2" onsubmit="return confirm('Confirma a exclusão definitiva deste projeto e de todos os seus dados?');">
+                            <input type="hidden" name="boardId" value="@board.Id"/>
+                            <input name="confirmationName" required autocomplete="off" class="field" placeholder="Digite: @board.Name" aria-label="Digite o nome do projeto para confirmar"/>
+                            <button class="w-full rounded-lg bg-red-600 py-2 text-xs font-bold text-white hover:bg-red-700">Excluir projeto definitivamente</button>
+                        </form>
+                    </details>
                 </details>
             </article>
         }

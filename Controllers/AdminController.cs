@@ -7,7 +7,7 @@ using System.Security.Claims;
 
 namespace PulseBoardMigration.Controllers;
 
-[Authorize(Policy = PulsePolicies.ManagerOrAdmin)]
+[Authorize(Policy = PulsePolicies.AdminOnly)]
 public class AdminController : Controller
 {
     private readonly WorkspaceService _workspaceService;

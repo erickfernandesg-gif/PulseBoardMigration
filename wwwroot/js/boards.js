@@ -4,6 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initDragAndDrop();
     initAjaxForms();
     initTaskFormRules();
+    initHandoffValidation();
     initFilters();
     initGanttControls();
     if (!restoreTaskDetailsAfterReload()) openTaskDetailsFromUrl();
@@ -13,22 +14,72 @@ function antiforgeryToken() {
     return document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
 }
 
+function formDataWithAntiforgery(form) {
+    const body = new FormData(form);
+    const token = form.querySelector('input[name="__RequestVerificationToken"]')?.value || antiforgeryToken();
+    if (token) body.set('__RequestVerificationToken', token);
+    return body;
+}
+
+async function jsonResponse(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) return await response.json();
+
+    if (response.status === 400 || response.status === 401 || response.status === 403 || response.redirected) {
+        return { success: false, message: 'Sua sessão ou validação de segurança expirou. Recarregue a página e tente novamente.' };
+    }
+    return { success: false, message: `O servidor não concluiu a operação (${response.status || 'sem resposta'}).` };
+}
+
 function initTabs() {
+    const requestedView = new URLSearchParams(window.location.search).get('view');
+    const initialView = ['kanban', 'table', 'gantt'].includes(requestedView) ? requestedView : 'kanban';
+    selectBoardView(initialView);
+
     document.querySelectorAll('[data-view-target]').forEach(button => {
         button.addEventListener('click', () => {
             const target = button.dataset.viewTarget;
-            ['kanban', 'table', 'gantt'].forEach(view =>
-                document.getElementById(`view-${view}`)?.classList.toggle('hidden', view !== target));
-            document.querySelectorAll('[data-view-target]').forEach(item => {
-                item.classList.toggle('bg-white', item === button);
-                item.classList.toggle('shadow-sm', item === button);
-                item.classList.toggle('text-indigo-600', item === button);
-            });
-            if (target === 'gantt') {
-                requestAnimationFrame(() => requestAnimationFrame(ensureGantt));
-            }
+            selectBoardView(target);
+            persistBoardViewState();
         });
     });
+}
+
+function selectBoardView(target) {
+    const view = ['kanban', 'table', 'gantt'].includes(target) ? target : 'kanban';
+    ['kanban', 'table', 'gantt'].forEach(name =>
+        document.getElementById(`view-${name}`)?.classList.toggle('hidden', name !== view));
+    document.querySelectorAll('[data-view-target]').forEach(button => {
+        const active = button.dataset.viewTarget === view;
+        button.classList.toggle('bg-white', active);
+        button.classList.toggle('shadow-sm', active);
+        button.classList.toggle('text-indigo-600', active);
+        button.classList.toggle('text-slate-600', !active);
+    });
+    if (view === 'gantt') {
+        requestAnimationFrame(() => requestAnimationFrame(ensureGantt));
+    }
+}
+
+function persistBoardViewState() {
+    const url = new URL(window.location.href);
+    const currentView = [...document.querySelectorAll('[data-view-target]')]
+        .find(button => !button.classList.contains('text-slate-600'))?.dataset.viewTarget || 'kanban';
+    const month = document.getElementById('filterMonth')?.value || '';
+    const user = document.getElementById('filterUser')?.value || '';
+    if (month) url.searchParams.set('filterMonth', month); else url.searchParams.delete('filterMonth');
+    if (user) url.searchParams.set('filterUser', user); else url.searchParams.delete('filterUser');
+    if (currentView !== 'kanban') url.searchParams.set('view', currentView); else url.searchParams.delete('view');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function restoreBoardFilterState(month, user) {
+    const parameters = new URLSearchParams(window.location.search);
+    const setIfAvailable = (element, value) => {
+        if (value && [...element.options].some(option => option.value === value)) element.value = value;
+    };
+    if (month) setIfAvailable(month, parameters.get('filterMonth'));
+    if (user) setIfAvailable(user, parameters.get('filterUser'));
 }
 
 let ganttAllTasks = [];
@@ -241,13 +292,8 @@ function initAjaxForms() {
                 if (form.id === 'commentForm') button.textContent = 'Enviando...';
             }
             try {
-                const response = await fetch(form.action, { method: 'POST', body: new FormData(form) });
-                let result;
-                try {
-                    result = await response.json();
-                } catch {
-                    result = { success: false, message: 'O servidor retornou uma resposta inválida.' };
-                }
+                const response = await fetch(form.action, { method: 'POST', body: formDataWithAntiforgery(form) });
+                const result = await jsonResponse(response);
                 if (!response.ok || !result.success) {
                     throw new Error(result.message || 'Operação não concluída.');
                 }
@@ -265,6 +311,47 @@ function initAjaxForms() {
 }
 
 function validateOperationForm(form) {
+    if (form.id === 'checklistForm') {
+        const title = form.elements.namedItem('title')?.value.trim() || '';
+        if (!title || title.length > 300) {
+            showFormError(form, 'Informe um item de até 300 caracteres.');
+            return false;
+        }
+        return true;
+    }
+
+    if (form.id === 'timeLogForm') {
+        const hours = Number.parseInt(form.elements.namedItem('hours')?.value || '0', 10) || 0;
+        const minutes = Number.parseInt(form.elements.namedItem('minutes')?.value || '0', 10) || 0;
+        if (hours < 0 || minutes < 0 || minutes > 59 || hours * 60 + minutes <= 0) {
+            showFormError(form, 'Informe pelo menos um minuto e use no máximo 59 minutos no segundo campo.');
+            return false;
+        }
+        return true;
+    }
+
+    if (form.id === 'subtaskForm') {
+        const title = form.elements.namedItem('title')?.value.trim() || '';
+        if (!title || title.length > 200) {
+            showFormError(form, 'Informe o título da subtarefa com até 200 caracteres.');
+            return false;
+        }
+        return true;
+    }
+
+    if (form.id === 'taskFileForm') {
+        const file = form.elements.namedItem('file')?.files?.[0];
+        if (!file) {
+            showFormError(form, 'Selecione um arquivo para enviar.');
+            return false;
+        }
+        if (file.size <= 0 || file.size > 25 * 1024 * 1024) {
+            showFormError(form, 'O arquivo deve ter até 25 MB.');
+            return false;
+        }
+        return true;
+    }
+
     if (form.id === 'commentForm') {
         const content = form.elements.namedItem('content')?.value.trim();
         const images = [...(form.elements.namedItem('images')?.files || [])];
@@ -379,6 +466,22 @@ function initTaskFormRules() {
     });
 }
 
+function initHandoffValidation() {
+    const requiresAcceptance = document.getElementById('HandoffRequiresAcceptance');
+    requiresAcceptance?.addEventListener('change', syncHandoffValidation);
+    syncHandoffValidation();
+}
+
+function syncHandoffValidation() {
+    const requiresAcceptance = document.getElementById('HandoffRequiresAcceptance');
+    const acceptanceConfig = document.getElementById('HandoffAcceptanceConfig');
+    const acceptanceBy = document.getElementById('HandoffAcceptanceBy');
+    const enabled = requiresAcceptance?.checked === true;
+
+    acceptanceConfig?.classList.toggle('hidden', !enabled);
+    if (acceptanceBy) acceptanceBy.disabled = !enabled;
+}
+
 function initTaskDetailTabs() {
     document.querySelectorAll('[data-task-tab]').forEach(button => {
         button.addEventListener('click', () => selectTaskDetailsTab(button.dataset.taskTab));
@@ -475,6 +578,7 @@ function renderChatImagePreview(files) {
 function initFilters() {
     const month = document.getElementById('filterMonth');
     const user = document.getElementById('filterUser');
+    restoreBoardFilterState(month, user);
     const matchesFilters = item => {
         const monthOk = !month?.value ||
             (month.value === 'inbox' ? !item.dataset.targetMonth : item.dataset.targetMonth === month.value);
@@ -497,10 +601,13 @@ function initFilters() {
             counter.textContent = String(tasks.filter(item => item.dataset.status === counter.dataset.columnCount).length);
         });
     };
-    month?.addEventListener('change', apply);
-    user?.addEventListener('change', apply);
-    month?.addEventListener('change', refreshVisibleGantt);
-    user?.addEventListener('change', refreshVisibleGantt);
+    const applyAndPersist = () => {
+        apply();
+        refreshVisibleGantt();
+        persistBoardViewState();
+    };
+    month?.addEventListener('change', applyAndPersist);
+    user?.addEventListener('change', applyAndPersist);
     apply();
 }
 
@@ -511,10 +618,7 @@ async function postForm(url, values) {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body
     });
-    const contentType = response.headers.get('content-type') || '';
-    const result = contentType.includes('application/json')
-        ? await response.json()
-        : { success: false, message: 'O servidor retornou uma resposta inválida.' };
+    const result = await jsonResponse(response);
     if (!response.ok) throw new Error(result.message || `Operação recusada (${response.status}).`);
     return result;
 }
@@ -549,6 +653,7 @@ window.openTaskDetailsModal = element => {
     clearFormError(editForm);
     const handoffForm = document.getElementById('handoffTaskForm');
     handoffForm?.reset();
+    syncHandoffValidation();
     if (handoffForm) clearFormError(handoffForm);
     ['dependencyForm', 'returnQuestionForm', 'checklistForm', 'timeLogForm', 'subtaskForm', 'taskFileForm']
         .forEach(formId => {
@@ -647,34 +752,55 @@ window.restoreTask = async taskId => {
 };
 
 window.toggleChecklist = async (id, completed) => {
-    const result = await postForm('/Boards/ToggleChecklistItem', { id, completed });
-    if (!result.success) alert('Não foi possível atualizar o item.');
+    try {
+        const result = await postForm('/Boards/ToggleChecklistItem', { id, completed });
+        if (!result.success) throw new Error(result.message || 'Não foi possível atualizar o item.');
+    } catch (error) {
+        alert(error.message || 'Não foi possível atualizar o item.');
+    }
 };
 
 window.deleteChecklist = async id => {
     if (!confirm('Excluir este item?')) return;
-    const result = await postForm('/Boards/DeleteChecklistItem', { id });
-    if (result.success) window.location.reload();
+    try {
+        const result = await postForm('/Boards/DeleteChecklistItem', { id });
+        if (!result.success) throw new Error(result.message || 'Não foi possível excluir o item.');
+        window.location.reload();
+    } catch (error) {
+        alert(error.message || 'Não foi possível excluir o item.');
+    }
 };
 
 window.editComment = async (commentId, currentContent) => {
     const content = prompt('Editar comentário:', currentContent);
     if (!content?.trim()) return;
-    const result = await postForm('/Boards/UpdateComment', { commentId, content });
-    if (result.success) window.location.reload();
-    else alert('Não foi possível editar o comentário.');
+    try {
+        const result = await postForm('/Boards/UpdateComment', { commentId, content });
+        if (!result.success) throw new Error(result.message || 'Não foi possível editar o comentário.');
+        window.location.reload();
+    } catch (error) {
+        alert(error.message || 'Não foi possível editar o comentário.');
+    }
 };
 
 window.deleteComment = async commentId => {
     if (!confirm('Excluir este comentário?')) return;
-    const result = await postForm('/Boards/DeleteComment', { commentId });
-    if (result.success) window.location.reload();
-    else alert('Não foi possível excluir o comentário.');
+    try {
+        const result = await postForm('/Boards/DeleteComment', { commentId });
+        if (!result.success) throw new Error(result.message || 'Não foi possível excluir o comentário.');
+        window.location.reload();
+    } catch (error) {
+        alert(error.message || 'Não foi possível excluir o comentário.');
+    }
 };
 
 window.deleteDependency = async dependencyId => {
     if (!confirm('Remover este pré-requisito?')) return;
-    const result = await postForm('/Work/DeleteDependency', { dependencyId });
-    if (result.success) window.location.reload();
-    else alert(result.message || 'Não foi possível remover o pré-requisito.');
+    try {
+        const result = await postForm('/Work/DeleteDependency', { dependencyId });
+        if (!result.success) throw new Error(result.message || 'Não foi possível remover o pré-requisito.');
+        window.location.reload();
+    } catch (error) {
+        alert(error.message || 'Não foi possível remover o pré-requisito.');
+    }
 };

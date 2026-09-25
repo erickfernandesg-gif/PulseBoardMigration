@@ -132,6 +132,21 @@ public class BoardService
         var approvalDelegations = await client.From<ApprovalDelegation>().Get();
         var templates = await client.From<TaskTemplate>().Where(x => x.IsActive == true).Get();
         var ownerTeamId = profiles.Models.FirstOrDefault(x => x.Id == board.OwnerId)?.TeamId;
+        var boardDependencies = dependencies.Models.Where(x => taskIds.Contains(x.TaskId)).ToList();
+        var externalDependencyIds = boardDependencies.Select(x => x.DependsOnTaskId)
+            .Except(taskIds).Distinct().ToHashSet();
+        var externalDependencyTasks = new List<PulseTask>();
+        var externalDependencyBoards = new List<Board>();
+        if (externalDependencyIds.Count > 0)
+        {
+            // A RLS filtra a consulta; somente pré-requisitos que o usuário pode
+            // ler são exibidos no detalhe da tarefa.
+            var visibleTasks = await client.From<PulseTask>().Get();
+            externalDependencyTasks = visibleTasks.Models.Where(x => externalDependencyIds.Contains(x.Id)).ToList();
+            var externalBoardIds = externalDependencyTasks.Select(x => x.BoardId).Distinct().ToHashSet();
+            var visibleBoards = await client.From<Board>().Get();
+            externalDependencyBoards = visibleBoards.Models.Where(x => externalBoardIds.Contains(x.Id)).ToList();
+        }
 
         var settings = board.Settings?.Count > 0
             ? board.Settings
@@ -157,7 +172,9 @@ public class BoardService
             Checklists = checklists.Models.Where(x => taskIds.Contains(x.TaskId)).OrderBy(x => x.PositionIndex).ToList(),
             Activity = activity.Models.OrderByDescending(x => x.CreatedAt).Take(100).ToList()
             ,Assignments = assignments.Models.Where(x => taskIds.Contains(x.TaskId)).ToList()
-            ,Dependencies = dependencies.Models.Where(x => taskIds.Contains(x.TaskId)).ToList()
+            ,Dependencies = boardDependencies
+            ,ExternalDependencyTasks = externalDependencyTasks
+            ,ExternalDependencyBoards = externalDependencyBoards
             ,Files = files.Models.Where(x => taskIds.Contains(x.TaskId)).OrderByDescending(x => x.CreatedAt).ToList()
             ,ApprovalSteps = approvalSteps.Models.Where(x => taskIds.Contains(x.TaskId)).OrderBy(x => x.Sequence).ToList()
             ,ApprovalDelegations = approvalDelegations.Models.ToList()
@@ -210,6 +227,58 @@ public class BoardService
         var response = await client.From<Board>().Where(b => b.Id == boardId)
             .Set(b => b.Status, "active").Update();
         return response.Models.Count > 0;
+    }
+
+    public async Task<bool> PermanentlyDeleteBoardAsync(Guid boardId, string? confirmationName, Guid currentUserId, bool isAdmin)
+    {
+        if (boardId == Guid.Empty) throw new InvalidOperationException("Projeto inválido.");
+
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var board = await client.From<Board>().Where(x => x.Id == boardId).Single();
+        if (board == null) return false;
+        if (!isAdmin && board.OwnerId != currentUserId) return false;
+        if (!string.Equals(confirmationName?.Trim(), board.Name, StringComparison.Ordinal))
+            throw new InvalidOperationException("Digite exatamente o nome do projeto para confirmar a exclusão definitiva.");
+
+        var tasks = await client.From<PulseTask>().Where(x => x.BoardId == boardId).Get();
+        var taskIds = tasks.Models.Select(x => x.Id).ToHashSet();
+        var storagePaths = new HashSet<string>(StringComparer.Ordinal);
+
+        if (taskIds.Count > 0)
+        {
+            var files = await client.From<TaskFile>().Get();
+            foreach (var file in files.Models.Where(x => taskIds.Contains(x.TaskId)))
+                if (!string.IsNullOrWhiteSpace(file.StoragePath)) storagePaths.Add(file.StoragePath);
+
+            try
+            {
+                var attachments = await client.From<TaskCommentAttachment>().Get();
+                foreach (var attachment in attachments.Models.Where(x => taskIds.Contains(x.TaskId)))
+                    if (!string.IsNullOrWhiteSpace(attachment.StoragePath)) storagePaths.Add(attachment.StoragePath);
+            }
+            catch (Postgrest.Exceptions.PostgrestException exception) when (IsMissingChatAttachmentTable(exception))
+            {
+                _logger.LogInformation("Tabela de anexos do chat indisponível ao excluir o quadro {BoardId}", boardId);
+            }
+        }
+
+        if (storagePaths.Count > 0)
+        {
+            try
+            {
+                var storage = _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket);
+                foreach (var batch in storagePaths.Chunk(100))
+                    await storage.Remove(batch.ToList());
+            }
+            catch (Exception exception)
+            {
+                _logger.LogError(exception, "Falha ao remover arquivos privados do quadro {BoardId}; exclusão cancelada", boardId);
+                throw new InvalidOperationException("Não foi possível remover os arquivos privados do projeto. Nenhum dado foi excluído.", exception);
+            }
+        }
+
+        await client.From<Board>().Where(x => x.Id == boardId).Delete();
+        return true;
     }
 
     public async Task<PulseTask?> CreateTaskAsync(
@@ -551,6 +620,8 @@ public class BoardService
     private static string PostgrestMessage(Postgrest.Exceptions.PostgrestException exception, string fallback)
     {
         if (string.IsNullOrWhiteSpace(exception.Content)) return fallback;
+        if (exception.Content.Contains("row-level security", StringComparison.OrdinalIgnoreCase))
+            return "O banco recusou a criação do projeto por uma regra de acesso. Se o problema continuar, contate o administrador.";
         try
         {
             using var document = JsonDocument.Parse(exception.Content);

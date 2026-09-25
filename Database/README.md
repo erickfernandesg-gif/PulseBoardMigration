@@ -2,6 +2,15 @@
 
 O projeto Supabase `cvusdlvkgltvwmqyadeg` já recebeu estas migrações. Os arquivos permanecem no repositório para auditoria e recuperação.
 
+Em 24/09/2026, a política `boards_read` do projeto ativo recebeu um ajuste pontual:
+o proprietário com perfil ativo é reconhecido diretamente na linha, antes das
+regras existentes de leitura e participação em aprovações. Isso permite que
+`INSERT ... RETURNING` devolva um projeto recém-criado sem afrouxar a política
+de inserção. A mesma regra foi incorporada aos scripts
+`boards_reliability_upgrade.sql` e `board_operations_integration_fix.sql` para
+novas instalações. A verificação com papel `authenticated` e `ROLLBACK`
+concluiu a inserção e confirmou que não restou projeto de teste.
+
 Para uma instalação nova, execute na ordem:
 
 1. `pulseboard_schema.sql`
@@ -31,3 +40,5 @@ Os scripts de upgrade são idempotentes sempre que possível. Alterações de pr
 - Arquivar preserva horas, comentários, arquivos e histórico.
 - Edição com `row_version` antiga é recusada.
 - Toda atribuição gera registro em `task_assignments` e alerta para o destinatário.
+- A função `generate_billing_invoice` existe e a emissão de fatura ocorre em uma única transação.
+- Quando houver recorrências ativas, o job `pulseboard-recurring-tasks` está agendado e concluindo; não implemente um segundo executor na aplicação web.

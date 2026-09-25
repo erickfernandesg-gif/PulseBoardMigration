@@ -355,6 +355,8 @@ public class WorkManagementService
         var dependency = tasks.Models.FirstOrDefault(x => x.Id == dependsOnTaskId && x.ArchivedAt == null);
         if (task == null || dependency == null)
             throw new InvalidOperationException("As tarefas precisam existir e estar ativas.");
+        if (task.BoardId != dependency.BoardId)
+            throw new InvalidOperationException("Use Operações do projeto para criar dependências entre projetos diferentes.");
         await client.From<TaskDependency>().Insert(new TaskDependency
         {
             TaskId = taskId,

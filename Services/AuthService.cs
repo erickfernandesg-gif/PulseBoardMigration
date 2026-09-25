@@ -16,6 +16,7 @@ public class AuthService
     public async Task<AuthenticatedLogin?> LoginAsync(string email, string password)
     {
         var client = _clientFactory.CreateAnonymousClient();
+        await client.InitializeAsync();
         var session = await client.Auth.SignIn(email, password);
         if (session?.User?.Id == null || !Guid.TryParse(session.User.Id, out var userId)) return null;
         var profile = await client.From<PulseBoardMigration.Models.Profile>()

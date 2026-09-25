@@ -1,26 +1,27 @@
 @{
     var path = Context.Request.Path.Value ?? "/";
     var canManage = User.IsInRole("admin") || User.IsInRole("manager");
+    var isAdmin = User.IsInRole("admin");
     var groups = new[]
     {
         ("", new[] {
-            ("/Work", "house", "Início", false)
+            ("/Work", "house", "Início", "all")
         }),
         ("PROJETOS", new[] {
-            ("/Boards", "kanban-square", "Projetos", false),
-            ("/Schedule", "calendar-range", "Cronograma", true)
+            ("/Boards", "kanban-square", "Projetos", "all"),
+            ("/Schedule", "calendar-range", "Cronograma", "manage")
         }),
         ("GESTÃO", new[] {
-            ("/Planning", "chart-no-axes-combined", "Central de gestão", true),
-            ("/Management", "users-round", "Equipe", true)
+            ("/Planning", "chart-no-axes-combined", "Central de gestão", "manage"),
+            ("/Management", "users-round", "Equipe", "manage")
         }),
         ("FINANCEIRO", new[] {
-            ("/Billing", "badge-dollar-sign", "Faturamento", true),
-            ("/Reports", "file-chart-column", "Indicadores", true)
+            ("/Billing", "badge-dollar-sign", "Faturamento", "manage"),
+            ("/Reports", "file-chart-column", "Indicadores", "manage")
         }),
         ("CONFIGURAÇÕES", new[] {
-            ("/Admin", "building-2", "Organização", true),
-            ("/Settings", "settings", "Meu perfil", false)
+            ("/Admin", "building-2", "Organização", "admin"),
+            ("/Settings", "settings", "Meu perfil", "all")
         })
     };
 }
@@ -35,7 +36,7 @@
         {
             <section>
                 @if (!string.IsNullOrEmpty(group.Item1)) { <p class="sidebar-text mb-1 px-3 text-[10px] font-bold tracking-wider text-slate-400">@group.Item1</p> }
-                @foreach (var link in group.Item2.Where(link => !link.Item4 || canManage))
+                @foreach (var link in group.Item2.Where(link => link.Item4 == "all" || (link.Item4 == "manage" && canManage) || (link.Item4 == "admin" && isAdmin)))
                 {
                     var active = path.StartsWith(link.Item1, StringComparison.OrdinalIgnoreCase);
                     <a href="@link.Item1" title="@link.Item3" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold @(active ? "bg-indigo-50 text-indigo-700" : "text-slate-600 hover:bg-slate-50")">

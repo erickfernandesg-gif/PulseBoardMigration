@@ -55,7 +55,7 @@ As páginas de gestão usam as políticas `ManagerOrAdmin`; faturamento usa `Fin
 | Faturamento | `/Billing` | Gestão | Contratos, aprovação de horas e faturas. |
 | Indicadores | `/Reports` | Gestão | Indicadores filtráveis e exportação Excel. |
 | Painel executivo | `/Executive` | Gestão | Carga, custo, margem e desempenho. |
-| Organização | `/Admin` | Gestão | Usuários, equipes, clientes e custo-hora. |
+| Organização | `/Admin` | Administradores | Usuários, equipes, clientes e custo-hora. |
 | Meu perfil | `/Settings` | Todos | Nome e preferências de notificação. |
 
 O topo contém busca global (tarefas, comentários e arquivos) e central de notificações. A busca começa com dois caracteres; notificações são atualizadas por Server-Sent Events (SSE), com consulta a cada cinco segundos.
@@ -66,7 +66,7 @@ O topo contém busca global (tarefas, comentários e arquivos) e central de noti
 
 Cada projeto é um registro em `boards`. Tem responsável, descrição, status (`active`, `paused`, `archived`), saúde (`on_track`, `at_risk`, `off_track`, `on_hold`), início/fim planejados, orçamento e uma configuração JSON de colunas.
 
-As colunas padrão são Caixa de Entrada, A Fazer, Em Execução, Homologação e Concluído, mas um gestor pode renomeá-las, definir cor, limite WIP e se exigem aprovação. Arquivar é reversível e preserva tarefas, horas, conversas e histórico.
+As colunas padrão são Caixa de Entrada, A Fazer, Em Execução, Homologação e Concluído, mas um gestor pode renomeá-las, definir cor, limite WIP e se exigem aprovação. Arquivar é reversível e preserva tarefas, horas, conversas e histórico. A exclusão definitiva é destinada a projetos de teste: exige digitar o nome exato do projeto e remove tarefas, conversas, arquivos privados, horas, aprovações e dependências associadas; não pode ser desfeita.
 
 ### Tarefa (task)
 
@@ -165,7 +165,7 @@ A **Central de gestão** reúne informações de várias áreas e permite filtra
 | Modelos | Armazena definição reutilizável de tarefa, com escopo opcional de projeto/equipe. |
 | Recorrências | Guarda regra diária, semanal ou mensal, intervalo, fuso, próxima execução, prazo relativo, responsável e limite de ocorrências. Pode ser pausada ou atualizada. |
 
-As regras de recorrência são persistidas no banco. Antes de depender delas em produção, a operação deve confirmar e manter o mecanismo de execução programada no ambiente Supabase, pois a aplicação web não possui um serviço em segundo plano próprio para dispará-las.
+As regras de recorrência são persistidas no banco e executadas pelo job privado `pulseboard-recurring-tasks` a cada 15 minutos quando a extensão `pg_cron` está disponível no Supabase. A geração é idempotente: cada ocorrência possui uma chave única, respeita fuso, etapa configurada, data final e limite de ocorrências. Antes de ativar recorrências em produção, a operação deve confirmar que esse job está agendado e concluindo com êxito; a aplicação web não deve executar um segundo agendador.
 
 O cronograma corporativo combina projetos, tarefas, marcos e dependências. O caminho crítico é calculado a partir da duração e das relações de predecessão, para destacar a sequência que mais afeta o prazo total.
 

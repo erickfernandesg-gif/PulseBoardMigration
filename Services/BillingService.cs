@@ -108,74 +108,9 @@ public class BillingService
         catch (Postgrest.Exceptions.PostgrestException exception)
             when (exception.Content?.Contains("PGRST202", StringComparison.OrdinalIgnoreCase) == true)
         {
-            // Compatibilidade temporária para instalações que ainda não executaram enterprise_upgrade.sql.
+            throw new InvalidOperationException(
+                "A transação de faturamento não está instalada. Execute as migrações do banco antes de emitir faturas.", exception);
         }
-        var tasks = await client.From<PulseTask>().Get();
-        var logs = await client.From<TimeLog>().Get();
-        var contracts = await client.From<ClientContract>().Get();
-        var taskIds = tasks.Models.Where(x => x.ClientId == clientId).Select(x => x.Id).ToHashSet();
-        var selectedLogs = logs.Models.Where(x =>
-            taskIds.Contains(x.TaskId) && x.IsBillable && x.ApprovalStatus == "approved" &&
-            x.BillingStatus == "unbilled" && x.LogDate.Date >= periodStart.Date && x.LogDate.Date <= periodEnd.Date).ToList();
-        if (selectedLogs.Count == 0) throw new InvalidOperationException("Não existem horas aprovadas e não faturadas nesse período.");
-
-        var contract = contracts.Models.FirstOrDefault(x => x.ClientId == clientId && x.IsActive &&
-            x.StartsOn.Date <= periodEnd.Date && (!x.EndsOn.HasValue || x.EndsOn.Value.Date >= periodStart.Date));
-        var total = selectedLogs.Sum(x => x.BillableAmount);
-        var invoice = new BillingInvoice
-        {
-            ClientId = clientId,
-            ContractId = contract?.Id,
-            Reference = $"PB-{DateTime.UtcNow:yyyyMMdd}-{Guid.NewGuid().ToString("N")[..6].ToUpperInvariant()}",
-            Status = "draft",
-            PeriodStart = periodStart.Date,
-            PeriodEnd = periodEnd.Date,
-            DueDate = dueDate?.Date,
-            Subtotal = total,
-            Total = total,
-            CreatedBy = creatorId,
-            CreatedAt = DateTime.UtcNow
-        };
-        var inserted = await client.From<BillingInvoice>().Insert(invoice);
-        var created = inserted.Models.FirstOrDefault() ?? throw new InvalidOperationException("Não foi possível criar a fatura.");
-
-        try
-        {
-            foreach (var log in selectedLogs)
-            {
-                var task = tasks.Models.First(x => x.Id == log.TaskId);
-                await client.From<BillingInvoiceItem>().Insert(new BillingInvoiceItem
-                {
-                    InvoiceId = created.Id,
-                    TimeLogId = log.Id,
-                    Description = $"{task.Title} - {log.LogDate:dd/MM/yyyy}",
-                    Minutes = log.Minutes,
-                    UnitRate = log.BillingRateSnapshot,
-                    Amount = log.BillableAmount,
-                    CreatedAt = DateTime.UtcNow
-                });
-                await client.From<TimeLog>()
-                    .Where(x => x.Id == log.Id)
-                    .Set(x => x.BillingStatus, "invoiced")
-                    .Set(x => x.InvoiceId, created.Id)
-                    .Update();
-            }
-        }
-        catch
-        {
-            foreach (var log in selectedLogs)
-            {
-                await client.From<TimeLog>()
-                    .Where(x => x.Id == log.Id)
-                    .Set(x => x.BillingStatus, "unbilled")
-                    .Set(x => x.InvoiceId, null)
-                    .Update();
-            }
-            await client.From<BillingInvoice>().Where(x => x.Id == created.Id).Delete();
-            throw;
-        }
-
-        return created;
     }
 
     public async Task UpdateInvoiceStatusAsync(Guid invoiceId, string status)

@@ -1,4 +1,7 @@
-@{ var canManageMobile = User.IsInRole("admin") || User.IsInRole("manager"); }
+@{
+    var canManageMobile = User.IsInRole("admin") || User.IsInRole("manager");
+    var isAdminMobile = User.IsInRole("admin");
+}
 <div id="mobileOverlay" class="fixed inset-0 z-40 hidden bg-slate-950/40 md:hidden"></div>
 <aside id="mobileSidebar" class="fixed inset-y-0 left-0 z-50 flex w-72 -translate-x-full flex-col bg-white p-4 shadow-2xl transition-transform md:hidden">
     <div class="mb-5 flex items-center justify-between"><strong class="text-xl">PulseBoard</strong><button id="closeMobileMenuBtn">✕</button></div>
@@ -14,7 +17,7 @@
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Billing">Faturamento</a>
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Reports">Indicadores</a>}
         <p class="px-3 pt-3 text-[10px] font-bold tracking-wider text-slate-400">CONFIGURAÇÕES</p>
-        @if(canManageMobile){<a class="block rounded-lg p-3 hover:bg-slate-50" href="/Admin">Organização</a>}
+        @if(isAdminMobile){<a class="block rounded-lg p-3 hover:bg-slate-50" href="/Admin">Organização</a>}
         <a class="block rounded-lg p-3 hover:bg-slate-50" href="/Settings">Meu perfil</a>
     </nav>
 </aside>

@@ -55,7 +55,9 @@ grant execute on function private.is_task_approval_participant(uuid) to authenti
 
 drop policy if exists boards_read on public.boards;
 create policy boards_read on public.boards for select to authenticated using (
-  (select private.can_read_board(id)) or exists (
+  (owner_id=(select auth.uid()) and exists (
+    select 1 from public.profiles p where p.id=(select auth.uid()) and p.is_active
+  )) or (select private.can_read_board(id)) or exists (
     select 1 from public.tasks t where t.board_id=boards.id and (select private.is_task_approval_participant(t.id))
   )
 );

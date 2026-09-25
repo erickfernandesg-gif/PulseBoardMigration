@@ -172,7 +172,14 @@ do $$ declare item record; begin
   loop execute format('drop policy %I on %I.%I',item.policyname,item.schemaname,item.tablename); end loop;
 end $$;
 
-create policy boards_read on public.boards for select to authenticated using((select private.can_read_board(id)));
+-- INSERT ... RETURNING tambem verifica a politica SELECT. A funcao STABLE acima
+-- consulta boards e nao enxerga a linha criada pela mesma instrucao; o dono
+-- ativo precisa ser reconhecido diretamente pelos campos da linha nova.
+create policy boards_read on public.boards for select to authenticated using(
+  (owner_id=(select auth.uid()) and exists(
+    select 1 from public.profiles p where p.id=(select auth.uid()) and p.is_active
+  )) or (select private.can_read_board(id))
+);
 create policy boards_insert on public.boards for insert to authenticated
   with check(owner_id=(select auth.uid()) and exists(select 1 from public.profiles p where p.id=(select auth.uid()) and p.is_active));
 create policy boards_update on public.boards for update to authenticated

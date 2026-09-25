@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using System.Security.Claims;
 using Supabase;
 
 namespace PulseBoardMigration.Services;
@@ -40,13 +41,27 @@ public class SupabaseClientFactory
             return client;
         }
 
+        var currentUserId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
         var accessToken = await context.GetTokenAsync("access_token");
         var refreshToken = await context.GetTokenAsync("refresh_token");
 
-        if (!string.IsNullOrWhiteSpace(accessToken) &&
-            !string.IsNullOrWhiteSpace(refreshToken))
+        if (string.IsNullOrWhiteSpace(currentUserId) ||
+            string.IsNullOrWhiteSpace(accessToken) ||
+            string.IsNullOrWhiteSpace(refreshToken))
         {
-            await client.Auth.SetSession(accessToken, refreshToken, false);
+            throw new UnauthorizedAccessException(
+                "Sua sessão de acesso ao banco não está disponível. Saia e entre novamente.");
+        }
+
+        // Inicializa o cliente antes de aplicar a sessão para que o token seja
+        // propagado ao PostgREST, que é a camada responsável por aplicar RLS.
+        await client.InitializeAsync();
+        await client.Auth.SetSession(accessToken, refreshToken, false);
+
+        if (!string.Equals(client.Auth.CurrentUser?.Id, currentUserId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException(
+                "A sessão do sistema não corresponde à sessão de acesso ao banco. Saia e entre novamente.");
         }
 
         return client;
