@@ -194,9 +194,11 @@ public class WorkManagementService
 
         var today = DateTime.UtcNow.Date;
         var weekEnd = today.AddDays(6);
+        var effortTasks = WorkRules.LeafTasksForEffort(activeTasks);
         var performance = visibleProfiles.Select(person =>
         {
             var owned = activeTasks.Where(x => x.AssignedTo == person.Id).ToList();
+            var ownedEffort = effortTasks.Where(x => x.AssignedTo == person.Id).ToList();
             var completed = owned.Where(x => x.Status == "done").ToList();
             var schedule = schedules.Models.FirstOrDefault(x => x.UserId == person.Id && x.ValidTo == null);
             var capacity = schedule?.WeeklyCapacityMinutes ?? 2400;
@@ -211,7 +213,7 @@ public class WorkManagementService
                 if (holiday.HolidayDate.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)) unavailableDates.Add(holiday.HolidayDate.Date);
             var unavailableDays = unavailableDates.Count;
             var effectiveCapacity = WorkRules.EffectiveWeeklyCapacity(capacity, unavailableDays);
-            var activeEstimate = owned.Where(x => x.Status != "done" && (x.StartDate ?? today) <= weekEnd && (x.DueDate ?? weekEnd) >= today).Sum(x => x.EstimatedMinutes);
+            var activeEstimate = ownedEffort.Where(x => x.Status != "done" && (x.StartDate ?? today) <= weekEnd && (x.DueDate ?? weekEnd) >= today).Sum(x => x.EstimatedMinutes);
             var onTime = completed.Count(x => !x.DueDate.HasValue || x.CompletedAt <= x.DueDate);
             var rework = assignments.Models.Count(x => x.ToUserId == person.Id && x.Status == "rejected");
             return new PerformancePersonMetric
@@ -219,9 +221,9 @@ public class WorkManagementService
                 UserId = person.Id, Name = person.FullName ?? person.Email,
                 CompletedTasks = completed.Count, OpenTasks = owned.Count(x => x.Status != "done"),
                 OverdueTasks = owned.Count(x => x.Status != "done" && x.DueDate < today),
-                BlockedTasks = owned.Count(x => x.IsBlocked), EstimatedMinutes = owned.Sum(x => x.EstimatedMinutes),
+                BlockedTasks = owned.Count(x => x.IsBlocked), EstimatedMinutes = ownedEffort.Sum(x => x.EstimatedMinutes),
                 LoggedMinutes = owned.Sum(x => x.TotalMinutesSpent), OnTimePercent = completed.Count == 0 ? 0 : onTime * 100m / completed.Count,
-                EstimateAccuracyPercent = WorkRules.EstimateAccuracyPercent(owned.Sum(x => x.EstimatedMinutes), owned.Sum(x => x.TotalMinutesSpent)),
+                EstimateAccuracyPercent = WorkRules.EstimateAccuracyPercent(ownedEffort.Sum(x => x.EstimatedMinutes), owned.Sum(x => x.TotalMinutesSpent)),
                 ReworkPercent = completed.Count + rework == 0 ? 0 : rework * 100m / (completed.Count + rework),
                 UtilizationPercent = WorkRules.UtilizationPercent(activeEstimate, effectiveCapacity),
                 AvailableHours = Math.Max(0, effectiveCapacity - activeEstimate) / 60m
@@ -304,6 +306,7 @@ public class WorkManagementService
                 {
                     TaskId = task.Id,
                     BoardId = task.BoardId,
+                    AssignedToId = task.AssignedTo,
                     TaskTitle = task.Title,
                     BoardName = boards.Models.FirstOrDefault(x => x.Id == task.BoardId)?.Name ?? "Projeto",
                     PersonName = profiles.Models.FirstOrDefault(x => x.Id == task.AssignedTo)?.FullName,

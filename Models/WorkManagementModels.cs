@@ -367,6 +367,7 @@ public class ScheduleRow
 {
     public Guid TaskId { get; set; }
     public Guid BoardId { get; set; }
+    public Guid? AssignedToId { get; set; }
     public string TaskTitle { get; set; } = string.Empty;
     public string BoardName { get; set; } = string.Empty;
     public string? PersonName { get; set; }
@@ -394,6 +395,7 @@ public class CompanyScheduleViewModel
 public class BillingViewModel
 {
     public string Month { get; set; } = DateTime.UtcNow.ToString("yyyy-MM");
+    public Profile? CurrentUser { get; set; }
     public List<TimeLog> Logs { get; set; } = [];
     public List<PulseTask> Tasks { get; set; } = [];
     public List<Board> Boards { get; set; } = [];
@@ -401,5 +403,21 @@ public class BillingViewModel
     public List<ClientAccount> Clients { get; set; } = [];
     public List<ClientContract> Contracts { get; set; } = [];
     public List<BillingInvoice> Invoices { get; set; } = [];
+    public List<BillingInvoiceItem> InvoiceItems { get; set; } = [];
     public decimal ApprovedUnbilled => Logs.Where(x => x.ApprovalStatus == "approved" && x.BillingStatus == "unbilled" && x.IsBillable).Sum(x => x.BillableAmount);
+    public IReadOnlyList<TimeLog> UnratedLogs => Logs
+        .Where(x => x.IsBillable && x.BillingStatus == "unbilled" && x.BillingRateSnapshot <= 0)
+        .OrderByDescending(x => x.LogDate)
+        .ToList();
+    public IReadOnlyList<TimeLog> UncostedLogs => Logs
+        .Where(x => x.CostRateSnapshot <= 0)
+        .OrderByDescending(x => x.LogDate)
+        .ToList();
+    public decimal PeriodInvoiceTotal => Invoices
+        .Where(x => x.Status is "issued" or "paid")
+        .Sum(x => x.Total);
+    public IReadOnlyList<BillingInvoiceItem> ItemsFor(Guid invoiceId) => InvoiceItems
+        .Where(x => x.InvoiceId == invoiceId)
+        .OrderBy(x => x.CreatedAt)
+        .ToList();
 }

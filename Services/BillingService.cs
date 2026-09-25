@@ -1,4 +1,5 @@
 using PulseBoardMigration.Models;
+using PulseBoardMigration.Domain;
 
 #pragma warning disable CS8603
 namespace PulseBoardMigration.Services;
@@ -28,30 +29,48 @@ public class BillingService
         var clients = await client.From<ClientAccount>().Get();
         var contracts = await client.From<ClientContract>().Get();
         var invoices = await client.From<BillingInvoice>().Get();
+        var invoiceItems = await client.From<BillingInvoiceItem>().Get();
+        var monthStart = DateTime.ParseExact($"{selectedMonth}-01", "yyyy-MM-dd", null);
+        var monthEnd = monthStart.AddMonths(1).AddDays(-1);
 
         return new BillingViewModel
         {
             Month = selectedMonth,
+            CurrentUser = current.Models.FirstOrDefault(),
             Logs = logs.Models.Where(x => x.LogDate.ToString("yyyy-MM") == selectedMonth).OrderByDescending(x => x.LogDate).ToList(),
             Tasks = tasks.Models.ToList(),
             Boards = boards.Models.ToList(),
             Profiles = profiles.Models.ToList(),
             Clients = clients.Models.ToList(),
-            Contracts = contracts.Models.OrderByDescending(x => x.CreatedAt).ToList(),
-            Invoices = invoices.Models.OrderByDescending(x => x.CreatedAt).ToList()
+            Contracts = contracts.Models.OrderByDescending(x => x.IsActive).ThenByDescending(x => x.CreatedAt).ToList(),
+            Invoices = invoices.Models
+                .Where(x => x.PeriodStart.Date <= monthEnd && x.PeriodEnd.Date >= monthStart)
+                .OrderByDescending(x => x.CreatedAt)
+                .ToList(),
+            InvoiceItems = invoiceItems.Models.ToList()
         };
     }
 
-    public async Task SaveContractAsync(ClientContract contract)
+    public async Task SaveContractAsync(ClientContract contract, Guid userId)
     {
-        if (contract.ClientId == Guid.Empty || string.IsNullOrWhiteSpace(contract.Name))
-            throw new InvalidOperationException("Cliente e nome do contrato são obrigatórios.");
-        if (contract.ContractType is not ("hourly" or "fixed" or "retainer" or "hour_bank" or "internal"))
-            throw new InvalidOperationException("Tipo de contrato inválido.");
+        if (contract.ClientId == Guid.Empty || contract.BoardId == null || string.IsNullOrWhiteSpace(contract.Name))
+            throw new InvalidOperationException("Projeto, cliente e nome do contrato são obrigatórios.");
+        if (!BillingRules.IsAutomaticBillingContract(contract.ContractType))
+            throw new InvalidOperationException("No momento, o faturamento automático aceita somente contratos por hora.");
+        if (contract.EndsOn.HasValue && contract.EndsOn.Value.Date < contract.StartsOn.Date)
+            throw new InvalidOperationException("O término do contrato não pode ser anterior ao início.");
 
         var client = await _clientFactory.CreateForCurrentUserAsync();
+        var current = await client.From<Profile>().Where(x => x.Id == userId).Single();
+        if (current?.Role is not ("manager" or "admin"))
+            throw new InvalidOperationException("Você não possui permissão para administrar contratos.");
+        var board = await client.From<Board>().Where(x => x.Id == contract.BoardId.Value).Single();
+        if (board == null)
+            throw new InvalidOperationException("Projeto não encontrado ou sem permissão de gestão.");
         contract.Name = contract.Name.Trim();
         contract.BillingRate = Math.Max(0, contract.BillingRate);
+        contract.BudgetAmount = contract.BudgetAmount.HasValue ? Math.Max(0, contract.BudgetAmount.Value) : null;
+        contract.IncludedMinutes = contract.IncludedMinutes.HasValue ? Math.Max(0, contract.IncludedMinutes.Value) : null;
         contract.CreatedAt = DateTime.UtcNow;
         if (contract.Id == Guid.Empty)
         {
@@ -63,6 +82,8 @@ public class BillingService
             .Where(x => x.Id == contract.Id)
             .Set(x => x.Name, contract.Name)
             .Set(x => x.ContractType, contract.ContractType)
+            .Set(x => x.BoardId, contract.BoardId)
+            .Set(x => x.ClientId, contract.ClientId)
             .Set(x => x.BillingRate, contract.BillingRate)
             .Set(x => x.BudgetAmount, contract.BudgetAmount)
             .Set(x => x.IncludedMinutes, contract.IncludedMinutes)
@@ -75,28 +96,44 @@ public class BillingService
     public async Task ReviewTimeLogAsync(Guid logId, Guid reviewerId, bool approve)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
-        await client.From<TimeLog>()
-            .Where(x => x.Id == logId)
-            .Set(x => x.ApprovalStatus, approve ? "approved" : "rejected")
-            .Set(x => x.ApprovedBy, reviewerId)
-            .Set(x => x.ApprovedAt, DateTime.UtcNow)
-            .Update();
+        await client.Rpc("review_billing_time_log", new
+        {
+            p_log_id = logId,
+            p_approve = approve,
+            p_reviewer_id = reviewerId
+        });
+    }
+
+    public async Task DeletePendingTimeLogAsync(Guid logId, Guid requesterId)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        await client.Rpc("delete_pending_billing_time_log", new
+        {
+            p_log_id = logId,
+            p_requester_id = requesterId
+        });
     }
 
     public async Task<BillingInvoice> GenerateInvoiceAsync(
         Guid clientId,
+        Guid boardId,
         Guid creatorId,
         DateTime periodStart,
         DateTime periodEnd,
         DateTime? dueDate)
     {
+        if (clientId == Guid.Empty || boardId == Guid.Empty)
+            throw new InvalidOperationException("Selecione o projeto e o cliente da cobrança.");
         if (periodEnd.Date < periodStart.Date) throw new InvalidOperationException("Período de faturamento inválido.");
+        if (dueDate.HasValue && dueDate.Value.Date < periodEnd.Date)
+            throw new InvalidOperationException("O vencimento deve ser igual ou posterior ao fim do período.");
         var client = await _clientFactory.CreateForCurrentUserAsync();
         try
         {
             var invoiceId = await client.Rpc<Guid>("generate_billing_invoice", new
             {
                 p_client_id = clientId,
+                p_board_id = boardId,
                 p_creator_id = creatorId,
                 p_period_start = periodStart.Date,
                 p_period_end = periodEnd.Date,
@@ -115,13 +152,14 @@ public class BillingService
 
     public async Task UpdateInvoiceStatusAsync(Guid invoiceId, string status)
     {
-        if (status is not ("draft" or "issued" or "paid" or "cancelled"))
+        if (status is not ("issued" or "paid" or "cancelled"))
             throw new InvalidOperationException("Situação de fatura inválida.");
         var client = await _clientFactory.CreateForCurrentUserAsync();
-        await client.From<BillingInvoice>()
-            .Where(x => x.Id == invoiceId)
-            .Set(x => x.Status, status)
-            .Update();
+        await client.Rpc("update_billing_invoice_status", new
+        {
+            p_invoice_id = invoiceId,
+            p_status = status
+        });
     }
 }
 #pragma warning restore CS8603

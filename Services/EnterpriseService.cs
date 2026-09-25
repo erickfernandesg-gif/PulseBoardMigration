@@ -42,18 +42,52 @@ public class EnterpriseService
         var scopedBoardIds = scopedBoards.Select(x => x.Id).ToHashSet();
         var scopedProfiles = activeProfiles.Where(x => !teamId.HasValue || x.TeamId == teamId).ToList();
         var scopedTasks = tasks.Models.Where(x => x.ArchivedAt == null && scopedBoardIds.Contains(x.BoardId)).ToList();
+        var scopedEffortTasks = WorkRules.LeafTasksForEffort(scopedTasks);
         var capacityProfiles = boardId.HasValue && !teamId.HasValue
             ? scopedProfiles.Where(person => scopedTasks.Any(task => task.AssignedTo == person.Id) || scopedBoards.Any(board => board.OwnerId == person.Id)).ToList()
             : scopedProfiles;
         var today = DateTime.UtcNow.Date;
         var relevantHolidays = holidays.Models.Where(x => x.HolidayDate.Date >= periodStart && x.HolidayDate.Date <= periodEnd).ToList();
         var relevantAbsences = absences.Models.Where(x => x.Status == "approved" && x.StartsOn.Date <= periodEnd && x.EndsOn.Date >= periodStart).ToList();
-        var capacity = capacityProfiles.Sum(person => CalculateCapacity(
-            person, schedules.Models, relevantHolidays, relevantAbsences, periodStart, periodEnd));
         var capacityProfileIds = capacityProfiles.Select(x => x.Id).ToHashSet();
-        var allocated = scopedTasks.Where(task => task.Status != "done" && task.AssignedTo.HasValue && capacityProfileIds.Contains(task.AssignedTo.Value) &&
-            (task.StartDate ?? periodStart).Date <= periodEnd && (task.DueDate ?? periodEnd).Date >= periodStart)
-            .Sum(x => Math.Max(0, x.EstimatedMinutes));
+        var capacityByDay = Enumerable.Range(0, (periodEnd - periodStart).Days + 1)
+            .Select(offset => periodStart.AddDays(offset)).ToDictionary(day => day, _ => 0);
+        foreach (var person in capacityProfiles)
+            foreach (var day in capacityByDay.Keys.ToList())
+                capacityByDay[day] += CalculateDailyCapacity(person, schedules.Models, relevantHolidays, relevantAbsences, day);
+
+        var allocatedByDay = capacityByDay.Keys.ToDictionary(day => day, _ => 0m);
+        var unassignedMinutes = 0m;
+        foreach (var task in scopedEffortTasks.Where(task => task.Status != "done"))
+        {
+            var taskStart = (task.StartDate ?? periodStart).Date;
+            var taskEnd = (task.DueDate ?? periodEnd).Date;
+            if (taskEnd < taskStart) taskEnd = taskStart;
+            var overlapStart = taskStart < periodStart ? periodStart : taskStart;
+            var overlapEnd = taskEnd > periodEnd ? periodEnd : taskEnd;
+            var estimate = Math.Max(0, task.EstimatedMinutes);
+            if (estimate == 0) continue;
+
+            var taskDays = Math.Max(1, (taskEnd - taskStart).Days + 1);
+            var overlapDays = overlapEnd >= overlapStart ? (overlapEnd - overlapStart).Days + 1 : 0;
+            var effortInPeriod = estimate * (decimal)overlapDays / taskDays;
+            if (!task.AssignedTo.HasValue)
+            {
+                unassignedMinutes += task.StartDate.HasValue || task.DueDate.HasValue ? effortInPeriod : estimate;
+                continue;
+            }
+            if (!capacityProfileIds.Contains(task.AssignedTo.Value) || overlapDays == 0) continue;
+
+            var dailyEffort = estimate / (decimal)taskDays;
+            for (var day = overlapStart; day <= overlapEnd; day = day.AddDays(1))
+                allocatedByDay[day] += dailyEffort;
+        }
+
+        var capacity = capacityByDay.Values.Sum();
+        var allocated = (int)Math.Round(allocatedByDay.Values.Sum(), MidpointRounding.AwayFromZero);
+        var overCapacityDays = capacityByDay.Count(item => allocatedByDay[item.Key] > item.Value);
+        var peakCapacityUtilization = capacityByDay.Count == 0 ? 0 : capacityByDay.Max(item =>
+            item.Value == 0 ? (allocatedByDay[item.Key] > 0 ? 200m : 0m) : allocatedByDay[item.Key] * 100m / item.Value);
         var dependencyList = dependencies.Models.Where(x => scopedBoardIds.Contains(x.PredecessorBoardId) || scopedBoardIds.Contains(x.SuccessorBoardId)).ToList();
         var conflicts = dependencyList.Where(dependency => IsDependencyConflict(dependency, activeBoards)).ToHashSet();
         var activeBaselines = baselines.Models.Where(x => x.IsActive)
@@ -61,17 +95,18 @@ public class EnterpriseService
         var metrics = scopedBoards.Select(board =>
         {
             var boardTasks = scopedTasks.Where(x => x.BoardId == board.Id).ToList();
+            var boardEffortTasks = WorkRules.LeafTasksForEffort(boardTasks);
             var open = boardTasks.Where(x => x.Status != "done").ToList();
             var forecast = board.ForecastEnd ?? open.Where(x => x.DueDate.HasValue).Select(x => x.DueDate).Max();
             var comparison = forecast ?? board.PlannedEnd;
-            var currentEstimate = boardTasks.Sum(x => Math.Max(0, x.EstimatedMinutes));
+            var currentEstimate = boardEffortTasks.Sum(x => Math.Max(0, x.EstimatedMinutes));
             var baselineEstimate = activeBaselines.TryGetValue(board.Id, out var baseline)
                 ? SnapshotInt(baseline.Snapshot, "estimatedMinutes") : null;
             return new PlanningBoardMetric
             {
                 BoardId = board.Id, Name = board.Name, Health = board.Health,
                 OpenTasks = open.Count, OverdueTasks = open.Count(x => x.DueDate < today),
-                BlockedTasks = open.Count(x => x.IsBlocked), EstimatedMinutes = open.Sum(x => Math.Max(0, x.EstimatedMinutes)),
+                BlockedTasks = open.Count(x => x.IsBlocked), EstimatedMinutes = boardEffortTasks.Where(x => x.Status != "done").Sum(x => Math.Max(0, x.EstimatedMinutes)),
                 BaselineEstimatedMinutes = baselineEstimate,
                 EffortVarianceMinutes = baselineEstimate.HasValue ? currentEstimate - baselineEstimate.Value : 0,
                 PlannedEnd = board.PlannedEnd, BaselineEnd = board.BaselineEnd, ForecastEnd = forecast,
@@ -96,7 +131,9 @@ public class EnterpriseService
             ProjectMetrics = metrics, SelectedTeamId = teamId, SelectedBoardId = boardId,
             CurrentUserTeamId = currentProfile.TeamId, IsAdmin = isAdmin,
             PeriodStart = periodStart, PeriodEnd = periodEnd, EffectiveCapacityMinutes = capacity,
-            AllocatedMinutes = allocated, OpenTasks = scopedTasks.Count(x => x.Status != "done"),
+            AllocatedMinutes = allocated, UnassignedMinutes = (int)Math.Round(unassignedMinutes, MidpointRounding.AwayFromZero),
+            OverCapacityDays = overCapacityDays, PeakCapacityUtilizationPercent = peakCapacityUtilization,
+            OpenTasks = scopedTasks.Count(x => x.Status != "done"),
             OverdueTasks = scopedTasks.Count(x => x.Status != "done" && x.DueDate < today),
             DependencyConflicts = conflicts.Count
         };
@@ -273,27 +310,22 @@ public class EnterpriseService
 
     private static string NormalizeTimeZone(string? value) => value is "America/Sao_Paulo" or "UTC" ? value : "America/Sao_Paulo";
 
-    private static int CalculateCapacity(Profile person, IReadOnlyCollection<WorkSchedule> schedules,
-        IReadOnlyCollection<CompanyHoliday> holidays, IReadOnlyCollection<UserAbsence> absences,
-        DateTime start, DateTime end)
+    private static int CalculateDailyCapacity(Profile person, IReadOnlyCollection<WorkSchedule> schedules,
+        IReadOnlyCollection<CompanyHoliday> holidays, IReadOnlyCollection<UserAbsence> absences, DateTime day)
     {
-        var schedule = schedules.Where(x => x.UserId == person.Id && x.ValidFrom.Date <= end && (!x.ValidTo.HasValue || x.ValidTo.Value.Date >= start))
-            .OrderByDescending(x => x.ValidFrom).FirstOrDefault();
+        var schedule = schedules.Where(x => x.UserId == person.Id && x.ValidFrom.Date <= day && (!x.ValidTo.HasValue || x.ValidTo.Value.Date >= day))
+            .OrderByDescending(x => x.ValidFrom).FirstOrDefault()
+            ?? schedules.Where(x => x.TeamId == person.TeamId && x.ValidFrom.Date <= day && (!x.ValidTo.HasValue || x.ValidTo.Value.Date >= day))
+                .OrderByDescending(x => x.ValidFrom).FirstOrDefault();
         var workDays = (schedule?.WorkDays ?? "1,2,3,4,5").Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(value => int.TryParse(value, out var day) ? day : 0).Where(day => day is >= 1 and <= 7).ToHashSet();
         if (workDays.Count == 0) workDays = [1, 2, 3, 4, 5];
         var dailyMinutes = (schedule?.WeeklyCapacityMinutes ?? 2400) / workDays.Count;
-        var unavailable = absences.Where(x => x.UserId == person.Id).ToList();
-        var total = 0;
-        for (var day = start.Date; day <= end.Date; day = day.AddDays(1))
-        {
-            var isoDay = day.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)day.DayOfWeek;
-            if (!workDays.Contains(isoDay)) continue;
-            if (holidays.Any(x => x.HolidayDate.Date == day && (!x.TeamId.HasValue || x.TeamId == person.TeamId))) continue;
-            if (unavailable.Any(x => x.StartsOn.Date <= day && x.EndsOn.Date >= day)) continue;
-            total += dailyMinutes;
-        }
-        return total;
+        var isoDay = day.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)day.DayOfWeek;
+        if (!workDays.Contains(isoDay)) return 0;
+        if (holidays.Any(x => x.HolidayDate.Date == day && (!x.TeamId.HasValue || x.TeamId == person.TeamId))) return 0;
+        if (absences.Any(x => x.UserId == person.Id && x.StartsOn.Date <= day && x.EndsOn.Date >= day)) return 0;
+        return dailyMinutes;
     }
 
     private static bool IsDependencyConflict(PortfolioDependency dependency, IReadOnlyCollection<Board> boards)

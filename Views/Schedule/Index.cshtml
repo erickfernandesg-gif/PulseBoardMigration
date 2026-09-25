@@ -1,12 +1,107 @@
 @model PulseBoardMigration.Models.CompanyScheduleViewModel
-@{ ViewData["Title"]="Cronograma da empresa"; var totalDays=Math.Max(1,(Model.To-Model.From).TotalDays); }
-<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><h1 class="text-3xl font-bold">Cronograma da empresa</h1><p class="mt-1 text-sm text-slate-500">Todos os projetos, responsáveis, prazos e riscos em uma única linha do tempo.</p></div><form method="get" class="flex gap-2"><input type="date" name="from" value="@Model.From.ToString("yyyy-MM-dd")" class="field"/><input type="date" name="to" value="@Model.To.ToString("yyyy-MM-dd")" class="field"/><button class="rounded-lg bg-slate-900 px-4 text-sm font-bold text-white">Aplicar</button></form></div>
-<div class="mb-5 grid gap-3 sm:grid-cols-5"><div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Itens planejados</p><p class="text-2xl font-bold">@Model.Rows.Count</p></div><div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Projetos</p><p class="text-2xl font-bold">@Model.Rows.Select(x=>x.BoardName).Distinct().Count()</p></div><div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Caminho crítico</p><p class="text-2xl font-bold text-fuchsia-700">@Model.Rows.Count(x=>x.IsCritical)</p></div><div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Atrasados</p><p class="text-2xl font-bold text-red-600">@Model.Rows.Count(x=>x.IsOverdue)</p></div><div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Bloqueados</p><p class="text-2xl font-bold text-amber-600">@Model.Rows.Count(x=>x.IsBlocked)</p></div></div>
-<section class="overflow-x-auto rounded-2xl border border-slate-200 bg-white"><div class="min-w-[1000px]"><div class="grid grid-cols-[300px_1fr] border-b bg-slate-50 text-xs font-bold uppercase text-slate-400"><div class="p-4">Entrega</div><div class="flex justify-between p-4"><span>@Model.From.ToString("dd/MM")</span><span>@Model.From.AddDays(totalDays/2).ToString("dd/MM")</span><span>@Model.To.ToString("dd/MM")</span></div></div>
-@foreach(var row in Model.Rows){<div class="grid grid-cols-[300px_1fr] items-center border-b last:border-0"><a href="/Boards/Details/@row.BoardId" class="p-4"><strong class="block truncate text-sm">@row.TaskTitle</strong><span class="text-xs text-slate-400">@row.BoardName · @row.PersonName @(row.IsCritical?"· crítico":"")</span></a><div class="relative mx-4 h-9 rounded-lg bg-slate-100"><div title="@row.Start.ToString("dd/MM") a @row.End.ToString("dd/MM")" class="absolute top-1.5 h-6 rounded-md @(row.IsBlocked?"bg-amber-500":row.IsOverdue?"bg-red-500":row.IsCritical?"bg-fuchsia-600":"bg-indigo-500")" style="left:@row.LeftPercent.ToString(System.Globalization.CultureInfo.InvariantCulture)%;width:@row.WidthPercent.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></div></div></div>}
-</div></section>
-@if(Model.PortfolioDependencies.Any())
-{
-<section class="mt-7 rounded-2xl border bg-white p-5"><h2 class="mb-1 text-lg font-bold">Dependências do portfólio</h2><p class="mb-4 text-xs text-slate-500">Relações entre projetos consideradas no planejamento corporativo.</p><div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">@foreach(var dependency in Model.PortfolioDependencies){<div class="rounded-xl bg-slate-50 p-3 text-sm"><strong>@Model.Board(dependency.PredecessorBoardId)?.Name</strong><span class="mx-2 text-slate-400">→</span><strong>@Model.Board(dependency.SuccessorBoardId)?.Name</strong><p class="mt-1 text-xs text-slate-400">@dependency.DependencyType · @dependency.LagDays dias</p></div>}</div></section>
+@{
+    ViewData["Title"] = "Cronograma de entregas";
+    var totalDays = Math.Max(1, (Model.To - Model.From).TotalDays);
+    var groups = Model.Rows.GroupBy(row => new { row.BoardId, row.BoardName }).OrderBy(group => group.Key.BoardName).ToList();
+    var people = Model.Rows.Where(row => row.AssignedToId.HasValue).GroupBy(row => new { row.AssignedToId, row.PersonName }).OrderBy(group => group.Key.PersonName).ToList();
+    var weekTicks = Enumerable.Range(0, (int)Math.Ceiling(totalDays) + 1)
+        .Select(offset => Model.From.AddDays(offset).Date)
+        .Where((date, index) => index == 0 || date.DayOfWeek == DayOfWeek.Monday || date.Date == Model.To.Date)
+        .Distinct()
+        .ToList();
+    decimal Position(DateTime date) => Math.Clamp((decimal)((date.Date - Model.From.Date).TotalDays / totalDays * 100), 0, 100);
+    string PositionStyle(DateTime date) => Position(date).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+    string PersonLabel(PulseBoardMigration.Models.ScheduleRow row) => string.IsNullOrWhiteSpace(row.PersonName) ? "Sem responsável" : row.PersonName;
 }
-<section class="mt-7 rounded-2xl border bg-white p-5"><h2 class="mb-4 text-lg font-bold">Marcos</h2><form asp-action="AddMilestone" method="post" class="mb-4 grid gap-2 sm:grid-cols-4"><select name="boardId" required class="field"><option value="">Projeto</option>@foreach(var board in Model.Boards){<option value="@board.Id">@board.Name</option>}</select><input name="title" required class="field" placeholder="Nome do marco"/><input type="date" name="dueDate" required class="field"/><button class="rounded-lg bg-indigo-600 text-sm font-bold text-white">Adicionar marco</button></form><div class="flex flex-wrap gap-2">@foreach(var milestone in Model.Milestones.OrderBy(x=>x.DueDate)){<span class="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-bold text-indigo-700">@milestone.DueDate.ToString("dd/MM") · @milestone.Title</span>}</div></section>
+
+<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div>
+        <p class="text-xs font-bold uppercase tracking-wide text-indigo-600">Acompanhamento da execução</p>
+        <h1 class="mt-1 text-3xl font-bold">Cronograma de entregas</h1>
+        <p class="mt-1 text-sm text-slate-500">Veja quando cada entrega planejada acontece, quem está responsável e quais tarefas exigem atenção.</p>
+    </div>
+    <form method="get" class="flex gap-2">
+        <input type="date" name="from" value="@Model.From.ToString("yyyy-MM-dd")" class="field" aria-label="Data inicial" />
+        <input type="date" name="to" value="@Model.To.ToString("yyyy-MM-dd")" class="field" aria-label="Data final" />
+        <button class="rounded-lg bg-slate-900 px-4 text-sm font-bold text-white">Aplicar período</button>
+    </form>
+</div>
+
+<section class="mb-5 flex flex-col gap-3 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm text-indigo-950 sm:flex-row sm:items-center sm:justify-between">
+    <div><strong>O que esta tela mostra</strong><p class="mt-1 text-xs text-indigo-700">Use-a para investigar entregas, datas e riscos. Para capacidade da equipe, baseline, ausências e conflitos entre projetos, use a Central de gestão.</p></div>
+    <a href="/Planning" class="shrink-0 rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-bold text-indigo-700">Abrir Central de gestão</a>
+</section>
+
+<div class="mb-5 grid gap-3 sm:grid-cols-5">
+    <div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Entregas no período</p><p id="visibleScheduleCount" class="text-2xl font-bold">@Model.Rows.Count</p></div>
+    <div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Projetos com entregas</p><p id="visibleProjectCount" class="text-2xl font-bold">@groups.Count</p><p class="mt-1 text-[11px] text-slate-400">no período selecionado</p></div>
+    <div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Caminho crítico</p><p class="text-2xl font-bold text-fuchsia-700">@Model.Rows.Count(x => x.IsCritical)</p></div>
+    <div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Atrasadas</p><p class="text-2xl font-bold text-red-600">@Model.Rows.Count(x => x.IsOverdue)</p></div>
+    <div class="rounded-xl border bg-white p-4"><p class="text-xs font-bold uppercase text-slate-400">Bloqueadas</p><p class="text-2xl font-bold text-amber-600">@Model.Rows.Count(x => x.IsBlocked)</p></div>
+</div>
+
+<section class="mb-4 rounded-2xl border bg-white p-4" aria-label="Filtros do cronograma">
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-end">
+        <div class="min-w-52 flex-1"><label class="label">Projeto</label><select id="scheduleProjectFilter" class="field"><option value="">Todos os projetos</option>@foreach (var group in groups) { <option value="@group.Key.BoardId">@group.Key.BoardName</option> }</select></div>
+        <div class="min-w-52 flex-1"><label class="label">Responsável</label><select id="schedulePersonFilter" class="field"><option value="">Todas as pessoas</option><option value="unassigned">Sem responsável</option>@foreach (var person in people) { <option value="@person.Key.AssignedToId">@person.Key.PersonName</option> }</select></div>
+        <div class="min-w-52 flex-1"><label class="label">Situação</label><select id="scheduleRiskFilter" class="field"><option value="">Todas as entregas</option><option value="attention">Exigem atenção</option><option value="overdue">Atrasadas</option><option value="blocked">Bloqueadas</option><option value="critical">Caminho crítico</option></select></div>
+        <button id="clearScheduleFilters" type="button" class="rounded-lg border px-4 py-2.5 text-sm font-bold text-slate-700">Limpar filtros</button>
+    </div>
+</section>
+
+<section class="overflow-x-auto rounded-2xl border border-slate-200 bg-white">
+    <div class="min-w-[1050px]">
+        <div class="grid grid-cols-[320px_1fr] border-b bg-slate-50 text-xs font-bold uppercase text-slate-400">
+            <div class="sticky left-0 z-10 bg-slate-50 p-4">Projeto e entrega</div>
+            <div class="relative h-12 overflow-visible p-4">
+                @foreach (var tick in weekTicks) { <span class="absolute top-4 -translate-x-1/2 whitespace-nowrap" style="left:@PositionStyle(tick)">@tick.ToString("dd/MM")</span> }
+            </div>
+        </div>
+
+        <div class="grid grid-cols-[320px_1fr] border-b bg-indigo-50/60 text-xs">
+            <div class="sticky left-0 z-10 bg-indigo-50 p-3 font-bold text-indigo-900">Marcos do período</div>
+            <div class="relative h-14 overflow-visible bg-indigo-50/60">
+                @foreach (var milestone in Model.Milestones.OrderBy(item => item.DueDate))
+                {
+                    <a href="/Boards/Details/@milestone.BoardId" title="@milestone.Title · @milestone.DueDate.ToString("dd/MM/yyyy")" class="absolute top-3 -translate-x-1/2 text-center text-indigo-700" style="left:@PositionStyle(milestone.DueDate)"><span class="block text-lg leading-4">◆</span><span class="mt-1 block max-w-28 truncate text-[10px] font-bold">@milestone.Title</span></a>
+                }
+                @if (!Model.Milestones.Any()) { <span class="absolute left-4 top-5 text-xs text-indigo-500">Nenhum marco neste período.</span> }
+            </div>
+        </div>
+
+        @foreach (var group in groups)
+        {
+            var groupStart = group.Min(item => item.Start);
+            var groupEnd = group.Max(item => item.End);
+            <details data-schedule-project="@group.Key.BoardId" open class="border-b last:border-0">
+                <summary class="grid cursor-pointer list-none grid-cols-[320px_1fr] bg-slate-50 hover:bg-slate-100">
+                    <div class="sticky left-0 z-10 flex items-center gap-3 bg-slate-50 p-3"><span class="text-slate-400">▾</span><div class="min-w-0"><strong class="block truncate text-sm">@group.Key.BoardName</strong><span class="text-xs text-slate-500">@group.Count() entrega(s) · @groupStart.ToString("dd/MM") a @groupEnd.ToString("dd/MM")</span></div></div>
+                    <div class="relative h-14 bg-slate-50"><div class="absolute top-5 h-4 rounded-full bg-indigo-200" style="left:@PositionStyle(groupStart);width:@Math.Max(1m, Position(groupEnd) - Position(groupStart)).ToString(System.Globalization.CultureInfo.InvariantCulture)%"></div></div>
+                </summary>
+                @foreach (var row in group.OrderBy(item => item.Start).ThenBy(item => item.TaskTitle))
+                {
+                    var rowRisk = row.IsBlocked ? "Bloqueada" : row.IsOverdue ? "Atrasada" : row.IsCritical ? "Caminho crítico" : "Planejada";
+                    <a href="/Boards/Details/@row.BoardId?taskId=@row.TaskId" data-schedule-row data-project-id="@row.BoardId" data-assignee-id="@(row.AssignedToId?.ToString() ?? "unassigned")" data-overdue="@row.IsOverdue.ToString().ToLowerInvariant()" data-blocked="@row.IsBlocked.ToString().ToLowerInvariant()" data-critical="@row.IsCritical.ToString().ToLowerInvariant()" class="schedule-task grid grid-cols-[320px_1fr] border-t hover:bg-slate-50">
+                        <div class="sticky left-0 z-10 bg-white p-3 pl-10"><strong class="block truncate text-sm">@row.TaskTitle</strong><span class="text-xs text-slate-400">@PersonLabel(row) · @row.Start.ToString("dd/MM")–@row.End.ToString("dd/MM")</span></div>
+                        <div class="relative mx-4 h-14">
+                            @foreach (var tick in weekTicks) { <span class="absolute inset-y-0 border-l border-slate-100" style="left:@PositionStyle(tick)"></span> }
+                            <span title="@rowRisk · @row.Start.ToString("dd/MM/yyyy") a @row.End.ToString("dd/MM/yyyy")" class="absolute top-4 h-6 rounded-md @(row.IsBlocked ? "bg-amber-500" : row.IsOverdue ? "bg-red-500" : row.IsCritical ? "bg-fuchsia-600" : "bg-indigo-500")" style="left:@row.LeftPercent.ToString(System.Globalization.CultureInfo.InvariantCulture)%;width:@row.WidthPercent.ToString(System.Globalization.CultureInfo.InvariantCulture)%"></span>
+                        </div>
+                    </a>
+                }
+            </details>
+        }
+        <div id="scheduleEmptyState" class="hidden p-10 text-center text-sm text-slate-500"><strong class="block text-slate-700">Nenhuma entrega corresponde aos filtros.</strong><span class="mt-1 block">Ajuste ou limpe os filtros para voltar a visualizar o cronograma.</span></div>
+    </div>
+</section>
+
+<div class="mt-4 flex flex-wrap items-center gap-3 text-xs text-slate-600" aria-label="Legenda do cronograma"><strong>Legenda:</strong><span class="flex items-center gap-1"><i class="h-3 w-3 rounded-sm bg-indigo-500"></i> Planejada</span><span class="flex items-center gap-1"><i class="h-3 w-3 rounded-sm bg-red-500"></i> Atrasada</span><span class="flex items-center gap-1"><i class="h-3 w-3 rounded-sm bg-amber-500"></i> Bloqueada</span><span class="flex items-center gap-1"><i class="h-3 w-3 rounded-sm bg-fuchsia-600"></i> Caminho crítico</span><span class="flex items-center gap-1 text-indigo-700">◆ Marco</span></div>
+
+@if (Model.PortfolioDependencies.Any())
+{
+    <section class="mt-7 rounded-2xl border bg-white p-5"><h2 class="mb-1 text-lg font-bold">Dependências entre projetos</h2><p class="mb-4 text-xs text-slate-500">Esses vínculos ajudam a interpretar o cronograma. A análise de conflitos e capacidade fica na Central de gestão.</p><div class="grid gap-2 md:grid-cols-2 xl:grid-cols-3">@foreach (var dependency in Model.PortfolioDependencies) { <a href="/Planning#prazos" class="rounded-xl bg-slate-50 p-3 text-sm hover:bg-indigo-50"><strong>@Model.Board(dependency.PredecessorBoardId)?.Name</strong><span class="mx-2 text-slate-400">→</span><strong>@Model.Board(dependency.SuccessorBoardId)?.Name</strong><p class="mt-1 text-xs text-slate-400">@dependency.DependencyType · @dependency.LagDays dias</p></a> }</div></section>
+}
+
+<section class="mt-7 rounded-2xl border bg-white p-5"><h2 class="mb-1 text-lg font-bold">Cadastrar marco</h2><p class="mb-4 text-xs text-slate-500">Use marcos para datas importantes que não são uma tarefa, como homologação, go-live ou entrega ao cliente.</p><form asp-action="AddMilestone" method="post" class="grid gap-2 sm:grid-cols-4"><select name="boardId" required class="field"><option value="">Projeto</option>@foreach (var board in Model.Boards) { <option value="@board.Id">@board.Name</option> }</select><input name="title" required class="field" placeholder="Ex.: Homologação concluída"/><input type="date" name="dueDate" required class="field"/><button class="rounded-lg bg-indigo-600 text-sm font-bold text-white">Adicionar marco</button></form></section>
+
+@section Scripts { <script src="~/js/schedule.js" asp-append-version="true"></script> }

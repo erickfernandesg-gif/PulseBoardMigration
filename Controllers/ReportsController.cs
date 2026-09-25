@@ -33,6 +33,14 @@ public class ReportsController : Controller
                 $"\"{row.BoardName.Replace("\"", "\"\"")}\";{row.TotalTasks};{row.CompletedTasks};" +
                 $"{row.BlockedTasks};{row.LoggedMinutes / 60m:0.00};{row.Cost:0.00}");
         }
+        csv.AppendLine();
+        csv.AppendLine("Projeto;Pessoa que registrou;Lançamentos;Horas realizadas;Custo/hora aplicado;Custo total");
+        foreach (var row in model.Contributors)
+        {
+            csv.AppendLine(
+                $"\"{row.BoardName.Replace("\"", "\"\"")}\";\"{row.PersonName.Replace("\"", "\"\"")}\";" +
+                $"{row.Entries};{row.LoggedMinutes / 60m:0.00};{row.EffectiveHourlyRate:0.00};{row.Cost:0.00}");
+        }
 
         return File(
             Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray(),

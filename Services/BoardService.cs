@@ -23,7 +23,7 @@ public class BoardService
         return response.Models.OrderByDescending(b => b.CreatedAt).ToList();
     }
 
-    public async Task<Board?> CreateBoardAsync(string name, string? description, Guid ownerId, DateTime? plannedStart = null, DateTime? plannedEnd = null, decimal? budgetAmount = null)
+    public async Task<Board?> CreateBoardAsync(string name, string? description, Guid ownerId, string? operationProfile = null, DateTime? plannedStart = null, DateTime? plannedEnd = null, decimal? budgetAmount = null)
     {
         ValidateBoardInput(name, plannedStart, plannedEnd, budgetAmount);
         var client = await _clientFactory.CreateForCurrentUserAsync();
@@ -33,6 +33,7 @@ public class BoardService
             Description = description?.Trim(),
             OwnerId = ownerId,
             Status = "active",
+            OperationProfile = NormalizeOperationProfile(operationProfile),
             Health = "on_track",
             PlannedStart = plannedStart?.Date,
             PlannedEnd = plannedEnd?.Date,
@@ -194,6 +195,7 @@ public class BoardService
         string? description,
         string status,
         string health = "on_track",
+        string? operationProfile = null,
         DateTime? plannedStart = null,
         DateTime? plannedEnd = null,
         decimal? budgetAmount = null)
@@ -206,12 +208,20 @@ public class BoardService
             .Set(b => b.Description!, description?.Trim())
             .Set(b => b.Status, NormalizeBoardStatus(status))
             .Set(b => b.Health, NormalizeHealth(health))
+            .Set(b => b.OperationProfile, NormalizeOperationProfile(operationProfile))
             .Set(b => b.PlannedStart, plannedStart)
             .Set(b => b.PlannedEnd, plannedEnd)
             .Set(b => b.BudgetAmount, budgetAmount.HasValue ? Math.Max(0, budgetAmount.Value) : null)
             .Update();
         return response.Models.Count > 0;
     }
+
+    private static string NormalizeOperationProfile(string? value) => value?.Trim().ToLowerInvariant() switch
+    {
+        "service" => "service",
+        "internal" => "internal",
+        _ => "delivery"
+    };
 
     public async Task<bool> DeleteBoardAsync(Guid boardId)
     {
@@ -328,6 +338,11 @@ public class BoardService
             throw new InvalidOperationException("Tarefa não encontrada neste quadro.");
         }
 
+        var board = await client.From<Board>().Where(item => item.Id == task.BoardId).Single()
+            ?? throw new InvalidOperationException("Projeto não encontrado ou sem permissão.");
+        if (!string.Equals(board.OperationProfile, "service", StringComparison.OrdinalIgnoreCase))
+            task.SlaMinutes = null;
+
         await EnsureBoardAndStatusAsync(client, task.BoardId, task.Status);
         try
         {
@@ -341,7 +356,9 @@ public class BoardService
                 p_due_date = task.DueDate, p_assigned_to = task.AssignedTo, p_client_id = task.ClientId,
                 p_target_month = string.IsNullOrWhiteSpace(task.TargetMonth) ? null : task.TargetMonth.Trim(),
                 p_estimated_minutes = Math.Max(0, task.EstimatedMinutes), p_sla_minutes = task.SlaMinutes,
-                p_planned_value = task.PlannedValue, p_custom_fields = existingTask.CustomFields,
+                // Kept only for compatibility with existing records. Task-level planned value is no
+                // longer editable because billing is contract/hour based.
+                p_planned_value = existingTask.PlannedValue, p_custom_fields = existingTask.CustomFields,
                 p_is_blocked = task.IsBlocked, p_blocker_reason = task.BlockerReason,
                 p_collaborator_ids = (collaboratorIds ?? []).Where(id => id != Guid.Empty).Distinct().ToArray()
             });
@@ -642,14 +659,14 @@ public class BoardService
         var taskResponse = await client.From<PulseTask>().Where(t => t.Id == log.TaskId).Get();
         var task = taskResponse.Models.FirstOrDefault()
             ?? throw new InvalidOperationException("Tarefa não encontrada.");
+        log.Minutes = Math.Max(1, log.Minutes);
+        log.LogDate = log.LogDate == default ? DateTime.UtcNow.Date : log.LogDate.Date;
         var rates = await client.From<UserRate>().Where(rate => rate.UserId == log.UserId).Get();
         var contracts = await client.From<ClientContract>().Get();
         var contract = contracts.Models.FirstOrDefault(item => item.IsActive &&
             task.ClientId.HasValue && item.ClientId == task.ClientId.Value &&
             (!item.BoardId.HasValue || item.BoardId == task.BoardId) &&
             item.StartsOn.Date <= log.LogDate.Date && (!item.EndsOn.HasValue || item.EndsOn.Value.Date >= log.LogDate.Date));
-        log.Minutes = Math.Max(1, log.Minutes);
-        log.LogDate = log.LogDate == default ? DateTime.UtcNow.Date : log.LogDate;
         log.CostRateSnapshot = rates.Models.FirstOrDefault()?.HourlyRate ?? 0;
         log.BillingRateSnapshot = log.IsBillable ? contract?.BillingRate ?? 0 : 0;
         log.ApprovalStatus = "pending";

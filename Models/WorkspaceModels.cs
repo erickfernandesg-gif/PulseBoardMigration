@@ -1,3 +1,4 @@
+using Newtonsoft.Json;
 using Postgrest.Attributes;
 using Postgrest.Models;
 
@@ -133,11 +134,13 @@ public class TimeLog : BaseModel
     [Column("invoice_id")]
     public Guid? InvoiceId { get; set; }
 
+    // Valores calculados apenas para a interface. Eles não existem como colunas
+    // em time_logs e, portanto, não podem seguir no payload de INSERT/UPDATE.
+    [Column("cost_amount", NullValueHandling.Include, true, true)]
     public decimal CostAmount => CostRateSnapshot * Minutes / 60m;
-    public decimal BillableAmount => BillingRateSnapshot * Minutes / 60m;
 
-    [Column("audit_hash")]
-    public string? AuditHash { get; set; }
+    [Column("billable_amount", NullValueHandling.Include, true, true)]
+    public decimal BillableAmount => BillingRateSnapshot * Minutes / 60m;
 
     [Column("created_at")]
     public DateTime CreatedAt { get; set; }

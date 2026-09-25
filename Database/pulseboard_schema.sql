@@ -41,6 +41,7 @@ create table if not exists public.boards (
   name text not null,
   description text,
   status text not null default 'active' check (status in ('active','paused','archived')),
+  operation_profile text not null default 'delivery' check (operation_profile in ('delivery','service','internal')),
   owner_id uuid references public.profiles(id) not null,
   settings jsonb not null default '[
     {"id":"backlog","title":"Caixa de Entrada"},
@@ -51,6 +52,7 @@ create table if not exists public.boards (
   ]'::jsonb,
   created_at timestamptz default now()
 );
+alter table public.boards add column if not exists operation_profile text not null default 'delivery';
 
 create table if not exists public.tasks (
   id uuid default uuid_generate_v4() primary key,

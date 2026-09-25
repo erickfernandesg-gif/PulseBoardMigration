@@ -82,6 +82,21 @@
         document.getElementById('RecurringPriority').value = option.dataset.priority || 'medium';
         document.getElementById('RecurringEstimatedMinutes').value = option.dataset.estimatedMinutes || '0';
     });
+    const planningFilterForm = document.querySelector('form[aria-label="Filtros do planejamento"]');
+    const returnState = {
+        returnTeamId: planningFilterForm?.elements.namedItem('teamId')?.value || '',
+        returnBoardId: planningFilterForm?.elements.namedItem('boardId')?.value || '',
+        returnFrom: planningFilterForm?.elements.namedItem('from')?.value || '',
+        returnTo: planningFilterForm?.elements.namedItem('to')?.value || ''
+    };
+    document.querySelectorAll('form[action^="/Planning/"]').forEach(form => {
+        Object.entries(returnState).forEach(([name, value]) => {
+            if (form.elements.namedItem(name)) return;
+            const input = document.createElement('input');
+            input.type = 'hidden'; input.name = name; input.value = value;
+            form.append(input);
+        });
+    });
     refreshStatuses();
 })();
 </script>

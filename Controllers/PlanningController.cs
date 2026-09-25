@@ -63,7 +63,25 @@ public class PlanningController : Controller
     {
         try { await action(); TempData["Success"] = success; }
         catch (Exception exception) { TempData["Error"] = exception.Message; }
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Index), ReturnFilterValues());
+    }
+
+    private Dictionary<string, object?> ReturnFilterValues()
+    {
+        var values = new Dictionary<string, object?>();
+        if (!Request.HasFormContentType) return values;
+        foreach (var field in new[] { "returnTeamId", "returnBoardId", "returnFrom", "returnTo" })
+        {
+            var value = Request.Form[field].ToString();
+            if (!string.IsNullOrWhiteSpace(value)) values[field[6..].ToLowerInvariant() switch
+            {
+                "teamid" => "teamId",
+                "boardid" => "boardId",
+                "from" => "from",
+                _ => "to"
+            }] = value;
+        }
+        return values;
     }
 
     private Guid UserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);

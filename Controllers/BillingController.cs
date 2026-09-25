@@ -22,33 +22,51 @@ public class BillingController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> SaveContract(ClientContract contract)
+    public async Task<IActionResult> SaveContract(ClientContract contract, string? month)
     {
+        if (!UserId(out var userId)) return Unauthorized();
         try
         {
-            await _service.SaveContractAsync(contract);
+            await _service.SaveContractAsync(contract, userId);
             TempData["Success"] = "Contrato salvo.";
         }
         catch (Exception exception) { TempData["Error"] = exception.Message; }
-        return RedirectToAction(nameof(Index));
+        return RedirectToAction(nameof(Index), new { month });
     }
 
     [HttpPost]
     public async Task<IActionResult> ReviewLog(Guid logId, bool approve, string? month)
     {
         if (!UserId(out var userId)) return Unauthorized();
-        await _service.ReviewTimeLogAsync(logId, userId, approve);
-        TempData["Success"] = approve ? "Apontamento aprovado." : "Apontamento rejeitado.";
+        try
+        {
+            await _service.ReviewTimeLogAsync(logId, userId, approve);
+            TempData["Success"] = approve ? "Apontamento aprovado." : "Apontamento rejeitado.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
         return RedirectToAction(nameof(Index), new { month });
     }
 
     [HttpPost]
-    public async Task<IActionResult> GenerateInvoice(Guid clientId, DateTime periodStart, DateTime periodEnd, DateTime? dueDate)
+    public async Task<IActionResult> DeletePendingLog(Guid logId, string? month)
     {
         if (!UserId(out var userId)) return Unauthorized();
         try
         {
-            var invoice = await _service.GenerateInvoiceAsync(clientId, userId, periodStart, periodEnd, dueDate);
+            await _service.DeletePendingTimeLogAsync(logId, userId);
+            TempData["Success"] = "Apontamento pendente excluído.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
+        return RedirectToAction(nameof(Index), new { month });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> GenerateInvoice(Guid clientId, Guid boardId, DateTime periodStart, DateTime periodEnd, DateTime? dueDate)
+    {
+        if (!UserId(out var userId)) return Unauthorized();
+        try
+        {
+            var invoice = await _service.GenerateInvoiceAsync(clientId, boardId, userId, periodStart, periodEnd, dueDate);
             TempData["Success"] = $"Fatura {invoice.Reference} criada.";
         }
         catch (Exception exception) { TempData["Error"] = exception.Message; }
@@ -58,8 +76,14 @@ public class BillingController : Controller
     [HttpPost]
     public async Task<IActionResult> UpdateInvoice(Guid invoiceId, string status, string? month)
     {
-        await _service.UpdateInvoiceStatusAsync(invoiceId, status);
-        TempData["Success"] = "Situação da fatura atualizada.";
+        try
+        {
+            await _service.UpdateInvoiceStatusAsync(invoiceId, status);
+            TempData["Success"] = status == "cancelled"
+                ? "Rascunho cancelado; as horas voltaram para faturamento."
+                : "Situação da fatura atualizada.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
         return RedirectToAction(nameof(Index), new { month });
     }
 

@@ -26,9 +26,22 @@ public class ReportRow
     public decimal Cost { get; set; }
 }
 
+public class ReportContributorRow
+{
+    public Guid BoardId { get; set; }
+    public string BoardName { get; set; } = string.Empty;
+    public Guid UserId { get; set; }
+    public string PersonName { get; set; } = string.Empty;
+    public int LoggedMinutes { get; set; }
+    public decimal Cost { get; set; }
+    public int Entries { get; set; }
+    public decimal EffectiveHourlyRate => LoggedMinutes <= 0 ? 0 : Cost * 60m / LoggedMinutes;
+}
+
 public class ReportsViewModel
 {
     public List<ReportRow> Rows { get; set; } = [];
+    public List<ReportContributorRow> Contributors { get; set; } = [];
     public List<Team> Teams { get; set; } = [];
     public List<Profile> Profiles { get; set; } = [];
     public string? Month { get; set; }

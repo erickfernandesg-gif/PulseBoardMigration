@@ -70,12 +70,12 @@ As colunas padrão são Caixa de Entrada, A Fazer, Em Execução, Homologação 
 
 ### Tarefa (task)
 
-Uma tarefa pertence a um projeto e possui título, descrição, status/coluna, prioridade, responsável, colaboradores, posição, datas, estimativa, horas apontadas, cliente, valor planejado, SLA, campos personalizados, bloqueio, versão de edição e estado de fluxo.
+Uma tarefa pertence a um projeto e possui título, descrição, status/coluna, prioridade, responsável, colaboradores, posição, datas, estimativa, horas apontadas, cliente, SLA de atendimento, campos personalizados, bloqueio, versão de edição e estado de fluxo. A estimativa mede esforço previsto; o SLA mede tempo operacional de atendimento; e o apontamento registra o trabalho efetivamente realizado.
 
 Prioridades aceitas são `low`, `medium`, `high` e `critical`. O sistema normaliza os sinônimos inseridos na tela. Uma tarefa pode conter:
 
 - checklist, que pode impedir a conclusão quando houver itens pendentes;
-- subtarefas;
+- subtarefas. Quando a demanda é dividida, a carga planejada passa a ser a soma das subtarefas para não duplicar a estimativa da demanda-pai;
 - dependências e dependências entre projetos;
 - comentários, respostas, perguntas e menções;
 - imagens no chat e arquivos versionados;

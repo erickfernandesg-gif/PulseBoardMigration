@@ -327,6 +327,12 @@ function validateOperationForm(form) {
             showFormError(form, 'Informe pelo menos um minuto e use no máximo 59 minutos no segundo campo.');
             return false;
         }
+        const isBillable = form.elements.namedItem('isBillable')?.checked;
+        const description = form.elements.namedItem('description')?.value.trim() || '';
+        if (isBillable && !description) {
+            showFormError(form, 'Descreva o trabalho realizado antes de enviar uma hora para aprovação de faturamento.');
+            return false;
+        }
         return true;
     }
 
@@ -682,8 +688,8 @@ window.openTaskDetailsModal = element => {
     const estimated = Number(get('estimatedMinutes') || 0);
     document.getElementById('EditEstimatedHours').value = Math.floor(estimated / 60);
     document.getElementById('EditEstimatedMinutes').value = estimated % 60;
-    document.getElementById('EditSlaMinutes').value = get('slaMinutes');
-    document.getElementById('EditPlannedValue').value = get('plannedValue');
+    const slaInput = document.getElementById('EditSlaMinutes');
+    if (slaInput) slaInput.value = get('slaMinutes');
     document.getElementById('EditIsBlocked').checked = get('isBlocked') === 'true';
     document.getElementById('EditBlockerReason').value = get('blockerReason');
     document.getElementById('EditBlockerReason').required = get('isBlocked') === 'true';

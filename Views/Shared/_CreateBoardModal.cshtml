@@ -18,6 +18,7 @@
                         <label for="Description" class="block text-sm font-semibold text-slate-700 mb-1">Descrição (Opcional)</label>
                         <textarea id="Description" name="Description" rows="3" class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all" placeholder="Qual o objetivo deste fluxo de trabalho?"></textarea>
                     </div>
+                    <div><label class="label">Perfil de operação</label><select name="operationProfile" class="field"><option value="delivery">Projeto / entrega — planejar e executar</option><option value="service">Suporte / operação — atender por SLA</option><option value="internal">Interno — fluxo simples</option></select><p class="mt-1 text-xs text-slate-500">Define quais campos aparecem na demanda. Apontamentos continuam disponíveis para preservar custo e faturamento.</p></div>
                     <div class="grid grid-cols-2 gap-3"><div><label class="label">Início planejado</label><input type="date" name="plannedStart" class="field"/></div><div><label class="label">Fim planejado</label><input type="date" name="plannedEnd" class="field"/></div></div>
                     <div><label class="label">Orçamento</label><input type="number" min="0" step="0.01" name="budgetAmount" class="field" placeholder="R$ 0,00"/></div>
                 </div>

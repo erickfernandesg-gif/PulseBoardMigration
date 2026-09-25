@@ -1,3 +1,5 @@
+using PulseBoardMigration.Models;
+
 namespace PulseBoardMigration.Domain;
 
 public static class WorkRules
@@ -16,11 +18,38 @@ public static class WorkRules
     public static decimal EstimateAccuracyPercent(int estimatedMinutes, int actualMinutes) =>
         estimatedMinutes <= 0 ? 0 : Math.Min(200m, Math.Max(0, actualMinutes) * 100m / estimatedMinutes);
 
+    // Once a demand is broken into subtasks, its own estimate is a container total.
+    // Planning must use the leaf tasks only, otherwise parent + child estimates are counted twice.
+    public static IReadOnlyList<PulseTask> LeafTasksForEffort(IEnumerable<PulseTask> tasks)
+    {
+        var list = tasks.ToList();
+        var parentIds = list.Where(task => task.ParentTaskId.HasValue)
+            .Select(task => task.ParentTaskId!.Value)
+            .ToHashSet();
+        return list.Where(task => !parentIds.Contains(task.Id)).ToList();
+    }
+
     public static decimal BillableAmount(int minutes, decimal hourlyRate) =>
         Math.Max(0, minutes) * Math.Max(0, hourlyRate) / 60m;
 
     public static bool CanMutateBilledTimeLog(string billingStatus) =>
         string.Equals(billingStatus, "unbilled", StringComparison.OrdinalIgnoreCase);
+}
+
+public static class BillingRules
+{
+    public static bool IsAutomaticBillingContract(string? contractType) =>
+        string.Equals(contractType, "hourly", StringComparison.OrdinalIgnoreCase);
+
+    public static bool CanTransitionInvoice(string? currentStatus, string? nextStatus) =>
+        (currentStatus, nextStatus) switch
+        {
+            ("draft", "issued") or ("draft", "cancelled") or ("issued", "paid") => true,
+            _ => false
+        };
+
+    public static bool IsBillableAndRated(TimeLog? log) =>
+        log is { IsBillable: true, BillingStatus: "unbilled", BillingRateSnapshot: > 0 };
 }
 
 public static class PlanningRules

@@ -1,4 +1,5 @@
 using PulseBoardMigration.Domain;
+using PulseBoardMigration.Models;
 using Xunit;
 
 namespace PulseBoardMigration.Tests;
@@ -23,6 +24,18 @@ public class WorkRulesTests
         Assert.Equal(200m, WorkRules.EstimateAccuracyPercent(60, 600));
     }
 
+    [Fact]
+    public void EffortUsesSubtasksInsteadOfCountingParentAndChildren()
+    {
+        var parent = new PulseTask { Id = Guid.NewGuid(), EstimatedMinutes = 480 };
+        var child = new PulseTask { Id = Guid.NewGuid(), ParentTaskId = parent.Id, EstimatedMinutes = 180 };
+
+        var effort = WorkRules.LeafTasksForEffort([parent, child]);
+
+        Assert.Single(effort);
+        Assert.Equal(child.Id, effort[0].Id);
+    }
+
     [Theory]
     [InlineData("invoiced", false)]
     [InlineData("written_off", false)]
@@ -36,6 +49,24 @@ public class WorkRulesTests
     public void BillableAmountUsesMinutePrecision()
     {
         Assert.Equal(187.50m, WorkRules.BillableAmount(90, 125m));
+    }
+
+    [Theory]
+    [InlineData("draft", "issued", true)]
+    [InlineData("draft", "cancelled", true)]
+    [InlineData("issued", "paid", true)]
+    [InlineData("paid", "draft", false)]
+    [InlineData("issued", "cancelled", false)]
+    public void InvoiceStatusUsesAnIrreversibleFinancialFlow(string current, string next, bool expected)
+    {
+        Assert.Equal(expected, BillingRules.CanTransitionInvoice(current, next));
+    }
+
+    [Fact]
+    public void OnlyHourlyContractsAreEligibleForAutomaticBilling()
+    {
+        Assert.True(BillingRules.IsAutomaticBillingContract("hourly"));
+        Assert.False(BillingRules.IsAutomaticBillingContract("fixed"));
     }
 
     [Fact]

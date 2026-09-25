@@ -29,6 +29,9 @@ Para uma instalação nova, execute na ordem:
 14. `board_operations_integration_fix.sql` — validação e integração de aprovações, substitutos, automações e ciclos de dependência.
 15. `planning_workspace_upgrade.sql` — cockpit de planejamento, baseline transacional, dependências sem ciclos e recorrências idempotentes.
 16. `planning_workspace_hardening.sql` — privilégios mínimos, políticas RLS sem sobreposição e índices dos relacionamentos de planejamento.
+17. `planning_governance_scope_fix.sql` — limita alterações de baseline, vínculos, modelos e recorrências ao projeto ou equipe autorizada do gestor.
+18. `billing_governance_upgrade.sql` — vincula contratos e faturas ao projeto, protege taxas históricas, controla aprovação, emissão e cancelamento de rascunhos.
+19. `board_operation_profile_upgrade.sql` — classifica boards como entrega, suporte ou interno; preserva apontamentos e remove SLA apenas quando um board deixa de ser suporte.
 
 Os scripts de upgrade são idempotentes sempre que possível. Alterações de produção devem ser aplicadas como migrações, nunca colando somente trechos isolados sem testar em uma transação.
 
@@ -41,4 +44,5 @@ Os scripts de upgrade são idempotentes sempre que possível. Alterações de pr
 - Edição com `row_version` antiga é recusada.
 - Toda atribuição gera registro em `task_assignments` e alerta para o destinatário.
 - A função `generate_billing_invoice` existe e a emissão de fatura ocorre em uma única transação.
+- Uma fatura em rascunho cancelada libera exatamente seus apontamentos; faturas emitidas ou pagas permanecem imutáveis e exigem estorno em processo separado.
 - Quando houver recorrências ativas, o job `pulseboard-recurring-tasks` está agendado e concluindo; não implemente um segundo executor na aplicação web.

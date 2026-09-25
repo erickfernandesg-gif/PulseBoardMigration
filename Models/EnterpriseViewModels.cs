@@ -20,6 +20,9 @@ public class EnterprisePlanningViewModel
     public DateTime PeriodEnd { get; set; }
     public int EffectiveCapacityMinutes { get; set; }
     public int AllocatedMinutes { get; set; }
+    public int UnassignedMinutes { get; set; }
+    public int OverCapacityDays { get; set; }
+    public decimal PeakCapacityUtilizationPercent { get; set; }
     public int OpenTasks { get; set; }
     public int OverdueTasks { get; set; }
     public int DependencyConflicts { get; set; }

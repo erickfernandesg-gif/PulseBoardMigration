@@ -24,7 +24,7 @@ public class BoardsController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create(string name, string? description, DateTime? plannedStart, DateTime? plannedEnd, decimal? budgetAmount)
+    public async Task<IActionResult> Create(string name, string? description, string? operationProfile, DateTime? plannedStart, DateTime? plannedEnd, decimal? budgetAmount)
     {
         if (string.IsNullOrWhiteSpace(name) || !TryUserId(out var userId))
         {
@@ -34,7 +34,7 @@ public class BoardsController : Controller
 
         try
         {
-            await _boardService.CreateBoardAsync(name, description, userId, plannedStart, plannedEnd, budgetAmount);
+            await _boardService.CreateBoardAsync(name, description, userId, operationProfile, plannedStart, plannedEnd, budgetAmount);
             TempData["Success"] = "Quadro criado com sucesso.";
         }
         catch (Exception exception)
@@ -68,13 +68,14 @@ public class BoardsController : Controller
         string? description,
         string status,
         string health,
+        string? operationProfile,
         DateTime? plannedStart,
         DateTime? plannedEnd,
         decimal? budgetAmount)
     {
         try
         {
-            var updated = await _boardService.UpdateBoardAsync(boardId, name, description, status, health, plannedStart, plannedEnd, budgetAmount);
+            var updated = await _boardService.UpdateBoardAsync(boardId, name, description, status, health, operationProfile, plannedStart, plannedEnd, budgetAmount);
             TempData[updated ? "Success" : "Error"] = updated ? "Quadro atualizado." : "Quadro não encontrado ou sem permissão.";
         }
         catch (Exception exception) { TempData["Error"] = exception.Message; }
@@ -204,7 +205,6 @@ public class BoardsController : Controller
         int? estimatedHours,
         int? estimatedMinutes,
         int? slaMinutes,
-        decimal? plannedValue,
         bool isBlocked,
         string? blockerReason,
         List<Guid>? collaboratorIds)
@@ -241,7 +241,6 @@ public class BoardsController : Controller
                 TargetMonth = targetMonth,
                 EstimatedMinutes = ToEstimatedMinutes(estimatedHours, estimatedMinutes),
                 SlaMinutes = slaMinutes.HasValue ? Math.Max(0, slaMinutes.Value) : null,
-                PlannedValue = plannedValue.HasValue ? Math.Max(0, plannedValue.Value) : null,
                 IsBlocked = isBlocked,
                 BlockerReason = blockerReason
             }, collaboratorIds ?? []);
@@ -451,12 +450,33 @@ public class BoardsController : Controller
         try
         {
             if (description?.Length > 1000) throw new InvalidOperationException("A descrição deve ter no máximo 1.000 caracteres.");
+            if (isBillable && string.IsNullOrWhiteSpace(description))
+                throw new InvalidOperationException("Descreva o trabalho realizado para enviar uma hora à aprovação de faturamento.");
             var log = await _boardService.AddTimeLogAsync(new TimeLog
             {
                 TaskId = taskId, UserId = userId, Minutes = total,
                 LogDate = logDate ?? DateTime.UtcNow.Date, Description = description, IsBillable = isBillable
             });
-            return Json(new { success = log != null, data = log });
+            if (log == null)
+            {
+                throw new InvalidOperationException("O apontamento não foi confirmado pelo banco de dados.");
+            }
+
+            // TimeLog herda metadados do cliente PostgREST. Retornar o objeto inteiro
+            // faz o MVC tentar serializar esses metadados e pode converter um INSERT
+            // bem-sucedido em erro HTTP 500. A página só precisa de dados simples.
+            return Json(new
+            {
+                success = true,
+                message = "Apontamento registrado. O custo histórico foi calculado para esta hora.",
+                data = new
+                {
+                    id = log.Id,
+                    minutes = log.Minutes,
+                    costRate = log.CostRateSnapshot,
+                    billingRate = log.BillingRateSnapshot
+                }
+            });
         }
         catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
     }

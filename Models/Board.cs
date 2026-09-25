@@ -42,6 +42,9 @@ public class Board : BaseModel
     [Column("status")]
     public string Status { get; set; } = "active";
 
+    [Column("operation_profile")]
+    public string OperationProfile { get; set; } = "delivery";
+
     [Column("settings")]
     public List<BoardColumnSetting> Settings { get; set; } = [];
 
