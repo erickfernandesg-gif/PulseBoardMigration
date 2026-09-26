@@ -37,6 +37,8 @@ public class WorkManagementService
     public async Task<List<UserNotification>> GetNotificationsAsync(Guid userId, int take = 40)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
+        var preference = await GetNotificationPreferenceAsync(userId);
+        if (!preference.InApp) return [];
         await client.Rpc("ensure_due_notifications", new { });
         var response = await client.From<UserNotification>()
             .Where(x => x.RecipientId == userId)
@@ -188,47 +190,45 @@ public class WorkManagementService
         var absences = await client.From<UserAbsence>().Get();
         var activeTasks = tasks.Models.Where(x => x.ArchivedAt == null).ToList();
         var visibleProfiles = current.Role == "admin"
-            ? profiles.Models
-            : profiles.Models.Where(x => x.TeamId == current.TeamId).ToList();
+            ? profiles.Models.Where(x => x.IsActive).ToList()
+            : profiles.Models.Where(x => x.IsActive && x.TeamId == current.TeamId).ToList();
         var visibleIds = visibleProfiles.Select(x => x.Id).ToHashSet();
 
         var today = DateTime.UtcNow.Date;
         var weekEnd = today.AddDays(6);
-        var effortTasks = WorkRules.LeafTasksForEffort(activeTasks);
-        var performance = visibleProfiles.Select(person =>
+        var visibleTasks = activeTasks.Where(x => !x.AssignedTo.HasValue || visibleIds.Contains(x.AssignedTo.Value)).ToList();
+        var visibleTaskIds = visibleTasks.Select(x => x.Id).ToHashSet();
+        var visibleAssignments = assignments.Models.Where(x => visibleTaskIds.Contains(x.TaskId)).ToList();
+        var effortTasks = WorkRules.LeafTasksForEffort(visibleTasks);
+        var workloads = visibleProfiles.Select(person =>
         {
-            var owned = activeTasks.Where(x => x.AssignedTo == person.Id).ToList();
+            var owned = visibleTasks.Where(x => x.AssignedTo == person.Id).ToList();
             var ownedEffort = effortTasks.Where(x => x.AssignedTo == person.Id).ToList();
-            var completed = owned.Where(x => x.Status == "done").ToList();
-            var schedule = schedules.Models.FirstOrDefault(x => x.UserId == person.Id && x.ValidTo == null);
-            var capacity = schedule?.WeeklyCapacityMinutes ?? 2400;
-            var unavailableDates = new HashSet<DateTime>();
-            foreach (var absence in absences.Models.Where(x => x.UserId == person.Id && x.Status == "approved" && x.StartsOn.Date <= weekEnd && x.EndsOn.Date >= today))
+            var schedule = CurrentScheduleFor(person, schedules.Models, today);
+            var planned = ownedEffort
+                .Where(x => x.Status != "done" && x.EstimatedMinutes > 0 && (x.StartDate.HasValue || x.DueDate.HasValue))
+                .Where(x => (x.StartDate ?? today).Date <= weekEnd && (x.DueDate ?? weekEnd).Date >= today)
+                .Sum(x => x.EstimatedMinutes);
+            var unplanned = ownedEffort.Count(x => x.Status != "done" &&
+                (x.EstimatedMinutes <= 0 || (!x.StartDate.HasValue && !x.DueDate.HasValue)));
+            return new ManagementPersonWorkload
             {
-                for (var day = absence.StartsOn.Date < today ? today : absence.StartsOn.Date;
-                     day <= (absence.EndsOn.Date > weekEnd ? weekEnd : absence.EndsOn.Date); day = day.AddDays(1))
-                    if (day.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)) unavailableDates.Add(day);
-            }
-            foreach (var holiday in holidays.Models.Where(x => x.HolidayDate.Date >= today && x.HolidayDate.Date <= weekEnd && (!x.TeamId.HasValue || x.TeamId == person.TeamId)))
-                if (holiday.HolidayDate.DayOfWeek is not (DayOfWeek.Saturday or DayOfWeek.Sunday)) unavailableDates.Add(holiday.HolidayDate.Date);
-            var unavailableDays = unavailableDates.Count;
-            var effectiveCapacity = WorkRules.EffectiveWeeklyCapacity(capacity, unavailableDays);
-            var activeEstimate = ownedEffort.Where(x => x.Status != "done" && (x.StartDate ?? today) <= weekEnd && (x.DueDate ?? weekEnd) >= today).Sum(x => x.EstimatedMinutes);
-            var onTime = completed.Count(x => !x.DueDate.HasValue || x.CompletedAt <= x.DueDate);
-            var rework = assignments.Models.Count(x => x.ToUserId == person.Id && x.Status == "rejected");
-            return new PerformancePersonMetric
-            {
-                UserId = person.Id, Name = person.FullName ?? person.Email,
-                CompletedTasks = completed.Count, OpenTasks = owned.Count(x => x.Status != "done"),
+                UserId = person.Id,
+                Name = person.FullName ?? person.Email,
+                Email = person.Email,
+                WeeklyCapacityMinutes = schedule?.WeeklyCapacityMinutes ?? 2400,
+                EffectiveCapacityMinutes = EffectiveCapacityForPeriod(person, schedules.Models, holidays.Models, absences.Models, today, weekEnd),
+                HasConfiguredCapacity = schedule != null,
+                PlannedMinutes = planned,
+                OpenTasks = owned.Count(x => x.Status != "done"),
                 OverdueTasks = owned.Count(x => x.Status != "done" && x.DueDate < today),
-                BlockedTasks = owned.Count(x => x.IsBlocked), EstimatedMinutes = ownedEffort.Sum(x => x.EstimatedMinutes),
-                LoggedMinutes = owned.Sum(x => x.TotalMinutesSpent), OnTimePercent = completed.Count == 0 ? 0 : onTime * 100m / completed.Count,
-                EstimateAccuracyPercent = WorkRules.EstimateAccuracyPercent(ownedEffort.Sum(x => x.EstimatedMinutes), owned.Sum(x => x.TotalMinutesSpent)),
-                ReworkPercent = completed.Count + rework == 0 ? 0 : rework * 100m / (completed.Count + rework),
-                UtilizationPercent = WorkRules.UtilizationPercent(activeEstimate, effectiveCapacity),
-                AvailableHours = Math.Max(0, effectiveCapacity - activeEstimate) / 60m
+                BlockedTasks = owned.Count(x => x.Status != "done" && x.IsBlocked),
+                PendingAssignments = visibleAssignments.Count(x => x.ToUserId == person.Id && x.Status == "pending"),
+                UnplannedTasks = unplanned
             };
-        }).ToList();
+        }).OrderBy(x => x.Name).ToList();
+
+        var openEffortTasks = effortTasks.Where(x => x.Status != "done").ToList();
 
         return new ManagementViewModel
         {
@@ -236,18 +236,30 @@ public class WorkManagementService
             Profiles = visibleProfiles.OrderBy(x => x.FullName ?? x.Email).ToList(),
             Teams = teams.Models.ToList(),
             Boards = boards.Models.ToList(),
-            Tasks = activeTasks.Where(x => x.AssignedTo.HasValue && visibleIds.Contains(x.AssignedTo.Value)).ToList(),
+            Tasks = visibleTasks,
             Schedules = schedules.Models.ToList(),
-            Assignments = assignments.Models.ToList(),
+            Assignments = visibleAssignments,
             Holidays = holidays.Models.ToList(),
             Absences = absences.Models.ToList(),
-            Performance = performance
+            PeriodStart = today,
+            PeriodEnd = weekEnd,
+            Workloads = workloads,
+            OpenTasksWithoutPlanning = openEffortTasks.Count(x => x.EstimatedMinutes <= 0 || (!x.StartDate.HasValue && !x.DueDate.HasValue)),
+            OpenUnassignedTasks = openEffortTasks.Count(x => !x.AssignedTo.HasValue),
+            PeopleWithoutConfiguredCapacity = workloads.Count(x => !x.HasConfiguredCapacity),
+            OverloadedPeople = workloads.Count(x => x.PlannedMinutes > x.EffectiveCapacityMinutes)
         };
     }
 
-    public async Task SaveWorkScheduleAsync(Guid userId, int weeklyCapacityMinutes)
+    public async Task SaveWorkScheduleAsync(Guid actorId, Guid userId, int weeklyCapacityMinutes)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
+        var profiles = await client.From<Profile>().Get();
+        var actor = profiles.Models.FirstOrDefault(x => x.Id == actorId);
+        var target = profiles.Models.FirstOrDefault(x => x.Id == userId);
+        if (actor == null || target == null || !target.IsActive ||
+            (actor.Role != "admin" && (actor.Role != "manager" || actor.TeamId == null || actor.TeamId != target.TeamId)))
+            throw new InvalidOperationException("Você só pode alterar a capacidade de pessoas ativas da sua equipe.");
         var response = await client.From<WorkSchedule>()
             .Where(x => x.UserId == userId)
             .Get();
@@ -268,6 +280,33 @@ public class WorkManagementService
             .Where(x => x.Id == current.Id)
             .Set(x => x.WeeklyCapacityMinutes, Math.Clamp(weeklyCapacityMinutes, 0, 10080))
             .Update();
+    }
+
+    private static WorkSchedule? CurrentScheduleFor(Profile person, IReadOnlyCollection<WorkSchedule> schedules, DateTime day) =>
+        schedules.Where(x => x.UserId == person.Id && x.ValidFrom.Date <= day && (!x.ValidTo.HasValue || x.ValidTo.Value.Date >= day))
+            .OrderByDescending(x => x.ValidFrom).FirstOrDefault()
+        ?? schedules.Where(x => x.TeamId == person.TeamId && x.ValidFrom.Date <= day && (!x.ValidTo.HasValue || x.ValidTo.Value.Date >= day))
+            .OrderByDescending(x => x.ValidFrom).FirstOrDefault();
+
+    private static int EffectiveCapacityForPeriod(Profile person, IReadOnlyCollection<WorkSchedule> schedules,
+        IReadOnlyCollection<CompanyHoliday> holidays, IReadOnlyCollection<UserAbsence> absences, DateTime from, DateTime to)
+    {
+        var total = 0;
+        for (var day = from; day <= to; day = day.AddDays(1))
+        {
+            var schedule = CurrentScheduleFor(person, schedules, day);
+            var workDays = (schedule?.WorkDays ?? "1,2,3,4,5").Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(value => int.TryParse(value, out var parsed) ? parsed : 0)
+                .Where(value => value is >= 1 and <= 7).ToHashSet();
+            if (workDays.Count == 0) workDays = [1, 2, 3, 4, 5];
+            var isoDay = day.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)day.DayOfWeek;
+            if (!workDays.Contains(isoDay) ||
+                holidays.Any(x => x.HolidayDate.Date == day && (!x.TeamId.HasValue || x.TeamId == person.TeamId)) ||
+                absences.Any(x => x.UserId == person.Id && x.Status == "approved" && x.StartsOn.Date <= day && x.EndsOn.Date >= day))
+                continue;
+            total += (schedule?.WeeklyCapacityMinutes ?? 2400) / workDays.Count;
+        }
+        return total;
     }
 
     public async Task<CompanyScheduleViewModel> GetCompanyScheduleAsync(DateTime? from, DateTime? to)

@@ -6,6 +6,9 @@ public class AdminViewModel
     public List<Team> Teams { get; set; } = [];
     public List<UserRate> Rates { get; set; } = [];
     public List<ClientAccount> Clients { get; set; } = [];
+    public Dictionary<Guid, int> TeamMemberCounts { get; set; } = [];
+    public Dictionary<Guid, int> ClientContractCounts { get; set; } = [];
+    public Dictionary<Guid, int> ClientInvoiceCounts { get; set; } = [];
     public bool IsManager { get; set; }
 }
 

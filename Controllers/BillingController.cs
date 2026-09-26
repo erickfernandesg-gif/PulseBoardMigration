@@ -35,6 +35,19 @@ public class BillingController : Controller
     }
 
     [HttpPost]
+    public async Task<IActionResult> DeleteContract(Guid contractId, string? month)
+    {
+        if (!UserId(out var userId)) return Unauthorized();
+        try
+        {
+            await _service.DeleteContractAsync(contractId, userId);
+            TempData["Success"] = "Contrato excluído.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
+        return RedirectToAction(nameof(Index), new { month });
+    }
+
+    [HttpPost]
     public async Task<IActionResult> ReviewLog(Guid logId, bool approve, string? month)
     {
         if (!UserId(out var userId)) return Unauthorized();
@@ -55,6 +68,56 @@ public class BillingController : Controller
         {
             await _service.DeletePendingTimeLogAsync(logId, userId);
             TempData["Success"] = "Apontamento pendente excluído.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
+        return RedirectToAction(nameof(Index), new { month });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ReopenLog(Guid logId, string? month)
+    {
+        if (!UserId(out var userId)) return Unauthorized();
+        try
+        {
+            await _service.ReopenTimeLogAsync(logId, userId);
+            TempData["Success"] = "Apontamento reaberto para revisão. Agora ele pode ser revisado ou excluído.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
+        return RedirectToAction(nameof(Index), new { month });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ReverseInvoiceAndDeleteLog(Guid logId, string? month)
+    {
+        if (!UserId(out var userId)) return Unauthorized();
+        try
+        {
+            await _service.ReverseInvoiceAndDeleteTimeLogAsync(logId, userId);
+            TempData["Success"] = "Fatura estornada e apontamento excluído. Os demais itens da fatura voltaram para a fila de cobrança.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
+        return RedirectToAction(nameof(Index), new { month });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> DeleteCancelledInvoice(Guid invoiceId, string? month)
+    {
+        try
+        {
+            await _service.DeleteCancelledInvoiceAsync(invoiceId);
+            TempData["Success"] = "Fatura cancelada, seus itens e eventos foram excluídos.";
+        }
+        catch (Exception exception) { TempData["Error"] = exception.Message; }
+        return RedirectToAction(nameof(Index), new { month });
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> CleanDemoScenario(Guid invoiceId, string? month)
+    {
+        try
+        {
+            await _service.CleanDemoScenarioAsync(invoiceId);
+            TempData["Success"] = "Cenário DEMO removido: fatura, contrato, cliente e projeto de teste.";
         }
         catch (Exception exception) { TempData["Error"] = exception.Message; }
         return RedirectToAction(nameof(Index), new { month });

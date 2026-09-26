@@ -361,6 +361,33 @@ public class ManagementViewModel
     public List<CompanyHoliday> Holidays { get; set; } = [];
     public List<UserAbsence> Absences { get; set; } = [];
     public List<PerformancePersonMetric> Performance { get; set; } = [];
+    public List<ManagementPersonWorkload> Workloads { get; set; } = [];
+    public DateTime PeriodStart { get; set; }
+    public DateTime PeriodEnd { get; set; }
+    public int OpenTasksWithoutPlanning { get; set; }
+    public int OpenUnassignedTasks { get; set; }
+    public int PeopleWithoutConfiguredCapacity { get; set; }
+    public int OverloadedPeople { get; set; }
+}
+
+public class ManagementPersonWorkload
+{
+    public Guid UserId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string? Email { get; set; }
+    public int WeeklyCapacityMinutes { get; set; }
+    public int EffectiveCapacityMinutes { get; set; }
+    public bool HasConfiguredCapacity { get; set; }
+    public int PlannedMinutes { get; set; }
+    public int OpenTasks { get; set; }
+    public int OverdueTasks { get; set; }
+    public int BlockedTasks { get; set; }
+    public int PendingAssignments { get; set; }
+    public int UnplannedTasks { get; set; }
+    public decimal UtilizationPercent => EffectiveCapacityMinutes <= 0
+        ? (PlannedMinutes > 0 ? 100 : 0)
+        : PlannedMinutes * 100m / EffectiveCapacityMinutes;
+    public int AvailableMinutes => Math.Max(0, EffectiveCapacityMinutes - PlannedMinutes);
 }
 
 public class ScheduleRow
@@ -402,6 +429,7 @@ public class BillingViewModel
     public List<Profile> Profiles { get; set; } = [];
     public List<ClientAccount> Clients { get; set; } = [];
     public List<ClientContract> Contracts { get; set; } = [];
+    public HashSet<Guid> ContractIdsWithInvoices { get; set; } = [];
     public List<BillingInvoice> Invoices { get; set; } = [];
     public List<BillingInvoiceItem> InvoiceItems { get; set; } = [];
     public decimal ApprovedUnbilled => Logs.Where(x => x.ApprovalStatus == "approved" && x.BillingStatus == "unbilled" && x.IsBillable).Sum(x => x.BillableAmount);

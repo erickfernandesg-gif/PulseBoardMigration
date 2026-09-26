@@ -100,5 +100,60 @@ public class AuthController : Controller
     }
 
     [HttpGet]
+    public IActionResult ForgotPassword() => View();
+
+    [HttpPost]
+    public async Task<IActionResult> ForgotPassword(string email)
+    {
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            try
+            {
+                var redirectTo = Url.ActionLink(nameof(ResetPassword), "Auth", values: null, protocol: Request.Scheme);
+                if (string.IsNullOrWhiteSpace(redirectTo)) throw new InvalidOperationException();
+                await _authService.RequestPasswordResetAsync(email, redirectTo);
+            }
+            catch
+            {
+                // The same response avoids exposing which e-mails have an account.
+            }
+        }
+
+        ViewData["Requested"] = true;
+        return View();
+    }
+
+    [HttpGet]
+    public IActionResult ResetPassword() => View();
+
+    [HttpPost]
+    public async Task<IActionResult> ResetPassword(string recoveryAccessToken, string newPassword, string confirmPassword)
+    {
+        if (newPassword?.Length < 8)
+        {
+            ModelState.AddModelError(string.Empty, "A nova senha precisa ter pelo menos 8 caracteres.");
+        }
+        else if (!string.Equals(newPassword, confirmPassword, StringComparison.Ordinal))
+        {
+            ModelState.AddModelError(string.Empty, "A confirmação não corresponde à nova senha.");
+        }
+        else
+        {
+            try
+            {
+                await _authService.ResetPasswordAsync(recoveryAccessToken, newPassword!);
+                TempData["Success"] = "Senha redefinida. Entre com a nova senha.";
+                return RedirectToAction(nameof(Login));
+            }
+            catch (Exception exception)
+            {
+                ModelState.AddModelError(string.Empty, exception.Message);
+            }
+        }
+
+        return View();
+    }
+
+    [HttpGet]
     public IActionResult AccessDenied() => View();
 }

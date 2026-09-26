@@ -15,7 +15,7 @@
                 <span id="notificationDot" class="absolute right-1 top-1 hidden h-2 w-2 rounded-full bg-red-500"></span>
             </button>
             <div id="notificationMenu" class="absolute right-0 z-50 mt-2 hidden w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-                <div class="border-b border-slate-100 px-4 py-3 text-sm font-bold">Atividade recente</div>
+                <div class="flex items-center justify-between border-b border-slate-100 px-4 py-3"><span class="text-sm font-bold">Atividade recente</span><button id="notificationMarkAllRead" type="button" class="text-xs font-bold text-indigo-600">Marcar tudo como lido</button></div>
                 <div id="notificationList" class="max-h-80 overflow-y-auto p-2"><p class="p-3 text-sm text-slate-400">Carregando...</p></div>
             </div>
         </div>
@@ -86,15 +86,14 @@
         if (loaded || menu.classList.contains('hidden')) return;
         try {
             await loadNotifications();
-            const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
-            await fetch('/Notifications/MarkRead', {
-                method: 'POST',
-                headers: {'Content-Type':'application/x-www-form-urlencoded'},
-                body: new URLSearchParams({__RequestVerificationToken: token})
-            });
             loaded = true;
-            document.getElementById('notificationDot')?.classList.add('hidden');
         } catch { list.innerHTML = '<p class="p-3 text-sm text-red-500">Falha ao carregar.</p>'; }
+    });
+    document.getElementById('notificationMarkAllRead')?.addEventListener('click', async event => {
+        event.stopPropagation();
+        const token = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        const response = await fetch('/Notifications/MarkRead', { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: new URLSearchParams({__RequestVerificationToken: token}) });
+        if (response.ok) { loaded = false; document.getElementById('notificationDot')?.classList.add('hidden'); await loadNotifications(); }
     });
     document.addEventListener('click', () => menu?.classList.add('hidden'));
     menu?.addEventListener('click', event => event.stopPropagation());

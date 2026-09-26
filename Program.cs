@@ -22,6 +22,7 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(keyDirectory);
 
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient();
 builder.Services.AddScoped<SupabaseClientFactory>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<BoardService>();

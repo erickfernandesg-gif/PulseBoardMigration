@@ -23,8 +23,16 @@ public class ManagementController : Controller
     [HttpPost]
     public async Task<IActionResult> SaveCapacity(Guid userId, decimal weeklyHours)
     {
-        await _service.SaveWorkScheduleAsync(userId, (int)Math.Round(Math.Clamp(weeklyHours, 0, 168) * 60));
-        TempData["Success"] = "Capacidade atualizada.";
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var actorId)) return Unauthorized();
+        try
+        {
+            await _service.SaveWorkScheduleAsync(actorId, userId, (int)Math.Round(Math.Clamp(weeklyHours, 0, 168) * 60));
+            TempData["Success"] = "Capacidade semanal atualizada.";
+        }
+        catch (Exception exception)
+        {
+            TempData["Error"] = exception.Message;
+        }
         return RedirectToAction(nameof(Index));
     }
 }

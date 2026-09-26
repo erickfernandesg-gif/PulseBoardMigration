@@ -26,6 +26,8 @@ public class WorkspaceService
         var teams = await client.From<Team>().Get();
         var rates = await client.From<UserRate>().Get();
         var clients = await client.From<ClientAccount>().Get();
+        var contracts = await client.From<ClientContract>().Get();
+        var invoices = await client.From<BillingInvoice>().Get();
         var current = profiles.Models.FirstOrDefault(p => p.Id == currentUserId);
 
         return new AdminViewModel
@@ -34,6 +36,10 @@ public class WorkspaceService
             Teams = teams.Models.OrderBy(t => t.Name).ToList(),
             Rates = rates.Models.ToList(),
             Clients = clients.Models.OrderBy(c => c.Name).ToList(),
+            TeamMemberCounts = profiles.Models.GroupBy(x => x.TeamId).Where(x => x.Key.HasValue)
+                .ToDictionary(x => x.Key!.Value, x => x.Count()),
+            ClientContractCounts = contracts.Models.GroupBy(x => x.ClientId).ToDictionary(x => x.Key, x => x.Count()),
+            ClientInvoiceCounts = invoices.Models.GroupBy(x => x.ClientId).ToDictionary(x => x.Key, x => x.Count()),
             IsManager = current?.Role is "admin" or "manager"
         };
     }
@@ -63,11 +69,7 @@ public class WorkspaceService
     public async Task<bool> UpdateProfileAsync(Guid id, string fullName)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
-        var response = await client.From<Profile>()
-            .Where(p => p.Id == id)
-            .Set(p => p.FullName!, fullName.Trim())
-            .Update();
-        return response.Models.Count > 0;
+        return await client.Rpc<bool>("update_own_profile_name", new { p_full_name = fullName.Trim() });
     }
 
     public async Task<List<AutomationRule>> GetAutomationsAsync(Guid? boardId = null)
@@ -184,6 +186,9 @@ public class WorkspaceService
     public async Task DeleteTeamAsync(Guid id)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
+        var profiles = await client.From<Profile>().Where(x => x.TeamId == id).Get();
+        if (profiles.Models.Any())
+            throw new InvalidOperationException("Esta equipe possui pessoas vinculadas. Reatribua-as antes de excluir a equipe.");
         await client.From<Team>().Where(t => t.Id == id).Delete();
     }
 
@@ -209,6 +214,12 @@ public class WorkspaceService
     public async Task DeleteClientAsync(Guid id)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
+        var contracts = await client.From<ClientContract>().Where(x => x.ClientId == id).Get();
+        var invoices = await client.From<BillingInvoice>().Where(x => x.ClientId == id).Get();
+        if (invoices.Models.Any())
+            throw new InvalidOperationException("Este cliente possui faturas. Preserve o cadastro para manter o histórico financeiro.");
+        if (contracts.Models.Any())
+            throw new InvalidOperationException("Este cliente possui contratos. Exclua ou encerre os contratos antes de excluir o cliente.");
         await client.From<ClientAccount>().Where(c => c.Id == id).Delete();
     }
 
@@ -220,6 +231,18 @@ public class WorkspaceService
         decimal hourlyRate)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
+        ValidatePersonInput(fullName, role, hourlyRate);
+        var profiles = await client.From<Profile>().Get();
+        var target = profiles.Models.FirstOrDefault(x => x.Id == id)
+            ?? throw new InvalidOperationException("Pessoa não encontrada.");
+        if (teamId.HasValue)
+        {
+            var team = await client.From<Team>().Where(x => x.Id == teamId.Value).Single();
+            if (team == null) throw new InvalidOperationException("Equipe não encontrada.");
+        }
+        if (target.IsActive && target.Role == "admin" && role != "admin" &&
+            profiles.Models.Count(x => x.IsActive && x.Role == "admin") <= 1)
+            throw new InvalidOperationException("Mantenha ao menos um administrador ativo na organização.");
         var profile = await client.From<Profile>()
             .Where(p => p.Id == id)
             .Set(p => p.FullName!, fullName.Trim())
@@ -256,6 +279,9 @@ public class WorkspaceService
         Guid? teamId,
         decimal hourlyRate)
     {
+        ValidatePersonInput(fullName, role, hourlyRate);
+        if (string.IsNullOrWhiteSpace(email) || !email.Contains('@') || password.Length < 8)
+            throw new InvalidOperationException("Informe e-mail válido e senha provisória com ao menos 8 caracteres.");
         var url = RequiredSetting("Supabase:Url");
         var serviceKey = ServiceRoleSetting();
         using var http = CreateAdminHttpClient(serviceKey);
@@ -290,6 +316,14 @@ public class WorkspaceService
     public async Task DeactivateEmployeeAsync(Guid userId, Guid deactivatedBy)
     {
         var service = _clientFactory.CreateServiceClient();
+        var profiles = await service.From<Profile>().Get();
+        var target = profiles.Models.FirstOrDefault(x => x.Id == userId)
+            ?? throw new InvalidOperationException("Pessoa não encontrada.");
+        if (target.Role == "admin" && target.IsActive && profiles.Models.Count(x => x.IsActive && x.Role == "admin") <= 1)
+            throw new InvalidOperationException("Não é possível desativar o último administrador ativo.");
+        var tasks = await service.From<PulseTask>().Get();
+        if (tasks.Models.Any(x => x.AssignedTo == userId && x.ArchivedAt == null && x.Status != "done"))
+            throw new InvalidOperationException("Reatribua as tarefas abertas desta pessoa antes de desativá-la.");
         await service.From<Profile>()
             .Where(profile => profile.Id == userId)
             .Set(profile => profile.IsActive, false)
@@ -347,6 +381,16 @@ public class WorkspaceService
         client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", serviceKey);
         return client;
+    }
+
+    private static void ValidatePersonInput(string fullName, string role, decimal hourlyRate)
+    {
+        if (string.IsNullOrWhiteSpace(fullName) || fullName.Trim().Length is < 2 or > 160)
+            throw new InvalidOperationException("Informe um nome entre 2 e 160 caracteres.");
+        if (role is not ("user" or "manager" or "admin"))
+            throw new InvalidOperationException("Função inválida.");
+        if (hourlyRate is < 0 or > 1_000_000)
+            throw new InvalidOperationException("Informe um custo por hora válido.");
     }
 }
 #pragma warning restore CS8603

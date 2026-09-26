@@ -43,6 +43,10 @@ public class BillingService
             Profiles = profiles.Models.ToList(),
             Clients = clients.Models.ToList(),
             Contracts = contracts.Models.OrderByDescending(x => x.IsActive).ThenByDescending(x => x.CreatedAt).ToList(),
+            ContractIdsWithInvoices = invoices.Models
+                .Where(x => x.ContractId.HasValue)
+                .Select(x => x.ContractId!.Value)
+                .ToHashSet(),
             Invoices = invoices.Models
                 .Where(x => x.PeriodStart.Date <= monthEnd && x.PeriodEnd.Date >= monthStart)
                 .OrderByDescending(x => x.CreatedAt)
@@ -93,6 +97,26 @@ public class BillingService
             .Update();
     }
 
+    public async Task DeleteContractAsync(Guid contractId, Guid userId)
+    {
+        if (contractId == Guid.Empty) throw new InvalidOperationException("Contrato inválido.");
+
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var current = await client.From<Profile>().Where(x => x.Id == userId).Single();
+        if (current?.Role is not ("manager" or "admin"))
+            throw new InvalidOperationException("Você não possui permissão para excluir contratos.");
+
+        var contract = await client.From<ClientContract>().Where(x => x.Id == contractId).Single();
+        if (contract == null)
+            throw new InvalidOperationException("Contrato não encontrado ou sem permissão.");
+
+        var invoices = await client.From<BillingInvoice>().Get();
+        if (invoices.Models.Any(x => x.ContractId == contractId))
+            throw new InvalidOperationException("Este contrato possui histórico de faturamento e não pode ser excluído. Desative-o para impedir novos apontamentos.");
+
+        await client.From<ClientContract>().Where(x => x.Id == contractId).Delete();
+    }
+
     public async Task ReviewTimeLogAsync(Guid logId, Guid reviewerId, bool approve)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
@@ -112,6 +136,38 @@ public class BillingService
             p_log_id = logId,
             p_requester_id = requesterId
         });
+    }
+
+    public async Task ReopenTimeLogAsync(Guid logId, Guid requesterId)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        await client.Rpc("reopen_billing_time_log", new
+        {
+            p_log_id = logId,
+            p_requester_id = requesterId
+        });
+    }
+
+    public async Task ReverseInvoiceAndDeleteTimeLogAsync(Guid logId, Guid requesterId)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        await client.Rpc("reverse_invoice_and_delete_time_log", new
+        {
+            p_log_id = logId,
+            p_requester_id = requesterId
+        });
+    }
+
+    public async Task DeleteCancelledInvoiceAsync(Guid invoiceId)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        await client.Rpc("delete_cancelled_billing_invoice", new { p_invoice_id = invoiceId });
+    }
+
+    public async Task CleanDemoScenarioAsync(Guid invoiceId)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        await client.Rpc("clean_demo_billing_scenario", new { p_invoice_id = invoiceId });
     }
 
     public async Task<BillingInvoice> GenerateInvoiceAsync(

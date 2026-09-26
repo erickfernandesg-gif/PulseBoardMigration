@@ -31,28 +31,32 @@ public class AdminController : Controller
     [HttpPost]
     public async Task<IActionResult> SaveTeam(Team team)
     {
-        await _workspaceService.SaveTeamAsync(team);
+        try { await _workspaceService.SaveTeamAsync(team); TempData["Success"] = "Equipe salva."; }
+        catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> DeleteTeam(Guid id)
     {
-        await _workspaceService.DeleteTeamAsync(id);
+        try { await _workspaceService.DeleteTeamAsync(id); TempData["Success"] = "Equipe excluída."; }
+        catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> SaveClient(ClientAccount account)
     {
-        await _workspaceService.SaveClientAsync(account);
+        try { await _workspaceService.SaveClientAsync(account); TempData["Success"] = "Cliente salvo."; }
+        catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index));
     }
 
     [HttpPost]
     public async Task<IActionResult> DeleteClient(Guid id)
     {
-        await _workspaceService.DeleteClientAsync(id);
+        try { await _workspaceService.DeleteClientAsync(id); TempData["Success"] = "Cliente excluído."; }
+        catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index));
     }
 
@@ -64,7 +68,8 @@ public class AdminController : Controller
         Guid? teamId,
         decimal hourlyRate)
     {
-        await _workspaceService.UpdateUserAsync(id, fullName, role, teamId, hourlyRate);
+        try { await _workspaceService.UpdateUserAsync(id, fullName, role, teamId, hourlyRate); TempData["Success"] = "Pessoa atualizada."; }
+        catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index));
     }
 

@@ -183,6 +183,54 @@ drop policy if exists time_logs_delete on public.time_logs;
 create policy time_logs_delete on public.time_logs for delete to authenticated using(
   user_id=(select auth.uid()) and approval_status='pending' and billing_status='unbilled');
 
+create or replace function private.reopen_billing_time_log_impl(p_log_id uuid,p_requester_id uuid)
+returns void language plpgsql security definer set search_path='' as $$
+declare target public.time_logs%rowtype; task_board uuid; actor uuid := (select auth.uid());
+begin
+  if actor is null or actor<>p_requester_id then raise exception 'Solicitante inválido.' using errcode='42501'; end if;
+  select l.* into target from public.time_logs l where l.id=p_log_id for update;
+  select t.board_id into task_board from public.tasks t where t.id=target.task_id;
+  if target.id is null or not private.can_edit_board(task_board) then raise exception 'Sem permissão para reabrir este apontamento.' using errcode='42501'; end if;
+  if target.approval_status not in('approved','rejected') or target.billing_status<>'unbilled' then raise exception 'Somente apontamentos aprovados ou rejeitados, ainda não faturados, podem ser reabertos.' using errcode='42501'; end if;
+  perform set_config('app.billing_operation','billing_review',true);
+  update public.time_logs set approval_status='pending',approved_by=null,approved_at=null where id=target.id;
+  insert into public.activity_log(task_id,board_id,user_id,action,details)
+  values(target.task_id,task_board,actor,'billing_time_log_reopened','{}'::jsonb);
+end $$;
+create or replace function public.reopen_billing_time_log(p_log_id uuid,p_requester_id uuid)
+returns void language sql security definer set search_path='' as $$ select private.reopen_billing_time_log_impl(p_log_id,p_requester_id); $$;
+revoke execute on function private.reopen_billing_time_log_impl(uuid,uuid), public.reopen_billing_time_log(uuid,uuid) from public,anon;
+grant execute on function public.reopen_billing_time_log(uuid,uuid) to authenticated;
+
+create or replace function private.reverse_invoice_and_delete_time_log_impl(p_log_id uuid,p_requester_id uuid)
+returns void language plpgsql security definer set search_path='' as $$
+declare target public.time_logs%rowtype; invoice public.billing_invoices%rowtype; task_board uuid; actor uuid := (select auth.uid()); released_count integer;
+begin
+  if actor is null or actor<>p_requester_id then raise exception 'Solicitante inválido.' using errcode='42501'; end if;
+  select l.* into target from public.time_logs l where l.id=p_log_id for update;
+  select t.board_id into task_board from public.tasks t where t.id=target.task_id;
+  select * into invoice from public.billing_invoices where id=target.invoice_id for update;
+  if target.id is null or task_board is null or not private.can_edit_board(task_board) then raise exception 'Sem permissão para estornar este apontamento.' using errcode='42501'; end if;
+  if invoice.id is null or target.billing_status<>'invoiced' or invoice.status<>'issued' then raise exception 'Somente apontamentos de faturas emitidas podem ser estornados por este fluxo. Faturas pagas exigem reembolso financeiro.' using errcode='42501'; end if;
+  perform set_config('app.billing_operation','cancel_draft',true);
+  update public.time_logs l set billing_status='unbilled',invoice_id=null from public.billing_invoice_items i where i.invoice_id=invoice.id and i.time_log_id=l.id and l.invoice_id=invoice.id;
+  get diagnostics released_count=row_count;
+  update public.billing_invoices set status='cancelled',status_changed_by=actor,status_changed_at=now(),cancelled_at=now() where id=invoice.id;
+  insert into public.billing_invoice_events(invoice_id,actor_id,event_type,details) values(invoice.id,actor,'cancelled',jsonb_build_object('reason','time_log_deleted','time_log_id',target.id,'released_count',released_count));
+  insert into public.activity_log(task_id,board_id,user_id,action,details) values(target.task_id,task_board,actor,'billing_invoice_reversed_time_log_deleted',jsonb_build_object('invoice_id',invoice.id,'released_count',released_count));
+  delete from public.time_logs where id=target.id;
+end $$;
+create or replace function public.reverse_invoice_and_delete_time_log(p_log_id uuid,p_requester_id uuid)
+returns void language sql security definer set search_path='' as $$ select private.reverse_invoice_and_delete_time_log_impl(p_log_id,p_requester_id); $$;
+revoke execute on function private.reverse_invoice_and_delete_time_log_impl(uuid,uuid), public.reverse_invoice_and_delete_time_log(uuid,uuid) from public,anon;
+grant execute on function public.reverse_invoice_and_delete_time_log(uuid,uuid) to authenticated;
+
+drop policy if exists contracts_delete on public.client_contracts;
+create policy contracts_delete on public.client_contracts for delete to authenticated using(
+  not exists(select 1 from public.billing_invoices invoice where invoice.contract_id=client_contracts.id)
+  and ((board_id is not null and (select private.can_edit_board(client_contracts.board_id)))
+    or (board_id is null and (select public.is_manager()))));
+
 drop function if exists public.generate_billing_invoice(uuid,uuid,date,date,date);
 create or replace function private.generate_billing_invoice_impl(
   p_client_id uuid,p_board_id uuid,p_creator_id uuid,p_period_start date,p_period_end date,p_due_date date default null)
