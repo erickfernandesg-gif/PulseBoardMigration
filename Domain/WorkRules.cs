@@ -104,6 +104,35 @@ public static class PlanningRules
         };
         return anchor?.Date.AddDays(Math.Clamp(lagDays, -365, 365));
     }
+
+    public static bool HasCompleteSchedule(DateTime? start, DateTime? end) =>
+        start.HasValue && end.HasValue;
+
+    // Items without either date are planning gaps, not work proven to belong to
+    // an arbitrary reporting period. They are tracked separately by capacity.
+    public static bool OverlapsPeriod(DateTime? start, DateTime? end, DateTime periodStart, DateTime periodEnd)
+    {
+        if (!start.HasValue && !end.HasValue) return false;
+        var effectiveStart = (start ?? DateTime.MinValue).Date;
+        var effectiveEnd = (end ?? DateTime.MaxValue).Date;
+        if (effectiveEnd < effectiveStart) effectiveEnd = effectiveStart;
+        return effectiveStart <= periodEnd.Date && effectiveEnd >= periodStart.Date;
+    }
+
+    public static decimal EstimatedMinutesInPeriod(int estimatedMinutes, DateTime? start, DateTime? end,
+        DateTime periodStart, DateTime periodEnd)
+    {
+        if (estimatedMinutes <= 0 || !start.HasValue && !end.HasValue) return 0;
+        var taskStart = (start ?? end)!.Value.Date;
+        var taskEnd = (end ?? start)!.Value.Date;
+        if (taskEnd < taskStart) taskEnd = taskStart;
+        var overlapStart = taskStart < periodStart.Date ? periodStart.Date : taskStart;
+        var overlapEnd = taskEnd > periodEnd.Date ? periodEnd.Date : taskEnd;
+        if (overlapEnd < overlapStart) return 0;
+        var taskDays = (taskEnd - taskStart).Days + 1;
+        var overlapDays = (overlapEnd - overlapStart).Days + 1;
+        return estimatedMinutes * (decimal)overlapDays / taskDays;
+    }
 }
 
 public static class CriticalPathRules

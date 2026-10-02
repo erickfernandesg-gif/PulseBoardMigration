@@ -12,14 +12,26 @@ public class PlanningController : Controller
     private readonly EnterpriseService _service;
     public PlanningController(EnterpriseService service) => _service = service;
 
-    public async Task<IActionResult> Index(Guid? teamId, Guid? boardId, DateTime? from, DateTime? to) =>
-        View(await _service.GetPlanningAsync(UserId(), User.IsInRole("admin"), teamId, boardId, from, to));
+    public async Task<IActionResult> Index(Guid? teamId, Guid? boardId, DateTime? from, DateTime? to)
+    {
+        if (from.HasValue && to.HasValue && to.Value.Date < from.Value.Date)
+        {
+            TempData["Error"] = "A data final não pode ser anterior à data inicial.";
+            return RedirectToAction(nameof(Index), new { teamId, boardId, from, to = from.Value.Date.AddDays(30) });
+        }
+        if (from.HasValue && to.HasValue && (to.Value.Date - from.Value.Date).TotalDays > 366)
+        {
+            TempData["Error"] = "O período máximo de análise é de 366 dias.";
+            return RedirectToAction(nameof(Index), new { teamId, boardId, from, to = from.Value.Date.AddDays(366) });
+        }
+        return View(await _service.GetPlanningAsync(UserId(), User.IsInRole("admin"), teamId, boardId, from, to));
+    }
 
     [HttpPost] public async Task<IActionResult> AddHoliday(DateTime date, string name, Guid? teamId) =>
-        await Execute(() => _service.AddHolidayAsync(date, name, teamId, UserId()), "Feriado adicionado.");
+        await Execute(() => _service.AddHolidayAsync(date, name, teamId, UserId(), User.IsInRole("admin")), "Feriado adicionado.");
 
     [HttpPost] public async Task<IActionResult> AddAbsence(Guid userId, string type, DateTime startsOn, DateTime endsOn, string? notes) =>
-        await Execute(() => _service.AddAbsenceAsync(userId, type, startsOn, endsOn, notes, UserId()), "Ausência registrada.");
+        await Execute(() => _service.AddAbsenceAsync(userId, type, startsOn, endsOn, notes, UserId(), User.IsInRole("admin")), "Ausência registrada.");
 
     [HttpPost] public async Task<IActionResult> CaptureBaseline(Guid boardId, string name) =>
         await Execute(() => _service.CaptureBaselineAsync(boardId, name, UserId()), "Baseline registrada.");

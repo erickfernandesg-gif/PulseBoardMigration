@@ -69,7 +69,10 @@ begin
   insert into public.project_baselines(board_id,version,name,planned_start,planned_end,budget_amount,snapshot,is_active,created_by,created_at)
   values(p_board_id,next_version,coalesce(nullif(trim(p_name),''),'Baseline '||next_version),target.planned_start,target.planned_end,
     target.budget_amount,jsonb_build_object('tasks',task_snapshot,'taskCount',jsonb_array_length(task_snapshot),
-      'estimatedMinutes',(select coalesce(sum(greatest(t.estimated_minutes,0)),0) from public.tasks t where t.board_id=p_board_id and t.archived_at is null),
+      'estimatedMinutesScope','leaf_tasks',
+      'estimatedMinutes',(select coalesce(sum(greatest(t.estimated_minutes,0)),0) from public.tasks t
+        where t.board_id=p_board_id and t.archived_at is null
+          and not exists(select 1 from public.tasks child where child.parent_task_id=t.id and child.archived_at is null)),
       'capturedAt',now()),true,(select auth.uid()),now()) returning id into baseline_id;
   update public.boards set baseline_start=planned_start,baseline_end=planned_end where id=p_board_id;
   return baseline_id;

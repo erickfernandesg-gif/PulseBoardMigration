@@ -42,6 +42,7 @@ public class EnterpriseService
         var scopedBoardIds = scopedBoards.Select(x => x.Id).ToHashSet();
         var scopedProfiles = activeProfiles.Where(x => !teamId.HasValue || x.TeamId == teamId).ToList();
         var scopedTasks = tasks.Models.Where(x => x.ArchivedAt == null && scopedBoardIds.Contains(x.BoardId)).ToList();
+        var periodTasks = scopedTasks.Where(task => PlanningRules.OverlapsPeriod(task.StartDate, task.DueDate, periodStart, periodEnd)).ToList();
         var scopedEffortTasks = WorkRules.LeafTasksForEffort(scopedTasks);
         var capacityProfiles = boardId.HasValue && !teamId.HasValue
             ? scopedProfiles.Where(person => scopedTasks.Any(task => task.AssignedTo == person.Id) || scopedBoards.Any(board => board.OwnerId == person.Id)).ToList()
@@ -58,25 +59,37 @@ public class EnterpriseService
 
         var allocatedByDay = capacityByDay.Keys.ToDictionary(day => day, _ => 0m);
         var unassignedMinutes = 0m;
+        var unscheduledMinutes = 0m;
         foreach (var task in scopedEffortTasks.Where(task => task.Status != "done"))
         {
-            var taskStart = (task.StartDate ?? periodStart).Date;
-            var taskEnd = (task.DueDate ?? periodEnd).Date;
+            var estimate = Math.Max(0, task.EstimatedMinutes);
+            if (estimate == 0) continue;
+            if (!PlanningRules.HasCompleteSchedule(task.StartDate, task.DueDate))
+            {
+                unscheduledMinutes += estimate;
+                continue;
+            }
+
+            var taskStart = task.StartDate!.Value.Date;
+            var taskEnd = task.DueDate!.Value.Date;
             if (taskEnd < taskStart) taskEnd = taskStart;
             var overlapStart = taskStart < periodStart ? periodStart : taskStart;
             var overlapEnd = taskEnd > periodEnd ? periodEnd : taskEnd;
-            var estimate = Math.Max(0, task.EstimatedMinutes);
-            if (estimate == 0) continue;
 
             var taskDays = Math.Max(1, (taskEnd - taskStart).Days + 1);
             var overlapDays = overlapEnd >= overlapStart ? (overlapEnd - overlapStart).Days + 1 : 0;
             var effortInPeriod = estimate * (decimal)overlapDays / taskDays;
             if (!task.AssignedTo.HasValue)
             {
-                unassignedMinutes += task.StartDate.HasValue || task.DueDate.HasValue ? effortInPeriod : estimate;
+                unassignedMinutes += effortInPeriod;
                 continue;
             }
-            if (!capacityProfileIds.Contains(task.AssignedTo.Value) || overlapDays == 0) continue;
+            if (!capacityProfileIds.Contains(task.AssignedTo.Value))
+            {
+                unassignedMinutes += effortInPeriod;
+                continue;
+            }
+            if (overlapDays == 0) continue;
 
             var dailyEffort = estimate / (decimal)taskDays;
             for (var day = overlapStart; day <= overlapEnd; day = day.AddDays(1))
@@ -94,14 +107,20 @@ public class EnterpriseService
             .GroupBy(x => x.BoardId).ToDictionary(x => x.Key, x => x.OrderByDescending(y => y.Version).First());
         var metrics = scopedBoards.Select(board =>
         {
-            var boardTasks = scopedTasks.Where(x => x.BoardId == board.Id).ToList();
+            var boardTasks = periodTasks.Where(x => x.BoardId == board.Id).ToList();
+            var allBoardTasks = scopedTasks.Where(x => x.BoardId == board.Id).ToList();
             var boardEffortTasks = WorkRules.LeafTasksForEffort(boardTasks);
+            var allBoardEffortTasks = WorkRules.LeafTasksForEffort(allBoardTasks);
             var open = boardTasks.Where(x => x.Status != "done").ToList();
-            var forecast = board.ForecastEnd ?? open.Where(x => x.DueDate.HasValue).Select(x => x.DueDate).Max();
+            var forecast = board.ForecastEnd ?? allBoardTasks.Where(x => x.Status != "done" && x.DueDate.HasValue).Select(x => x.DueDate).Max();
             var comparison = forecast ?? board.PlannedEnd;
-            var currentEstimate = boardEffortTasks.Sum(x => Math.Max(0, x.EstimatedMinutes));
             var baselineEstimate = activeBaselines.TryGetValue(board.Id, out var baseline)
                 ? SnapshotInt(baseline.Snapshot, "estimatedMinutes") : null;
+            // Baselines created before the audit stored parent and child estimates together.
+            // Preserve their historical scope while new snapshots use leaf tasks.
+            var baselineUsesLeafTasks = baseline != null && SnapshotString(baseline.Snapshot, "estimatedMinutesScope") == "leaf_tasks";
+            var currentEstimate = (baselineUsesLeafTasks ? allBoardEffortTasks : allBoardTasks)
+                .Sum(x => Math.Max(0, x.EstimatedMinutes));
             return new PlanningBoardMetric
             {
                 BoardId = board.Id, Name = board.Name, Health = board.Health,
@@ -117,24 +136,34 @@ public class EnterpriseService
         }).OrderByDescending(x => x.OverdueTasks > 0 || x.BlockedTasks > 0 || x.HasDependencyConflict)
           .ThenByDescending(x => x.ScheduleVarianceDays).ThenBy(x => x.Name).ToList();
 
+        var scopeTeamIds = capacityProfiles.Select(x => x.TeamId).Where(x => x.HasValue).Select(x => x!.Value).ToHashSet();
+        var scopedHolidays = relevantHolidays.Where(holiday => !holiday.TeamId.HasValue || scopeTeamIds.Contains(holiday.TeamId.Value)).ToList();
+        var scopedAbsences = relevantAbsences.Where(absence => capacityProfileIds.Contains(absence.UserId)).ToList();
+        var scopedBaselines = baselines.Models.Where(baseline => scopedBoardIds.Contains(baseline.BoardId)).ToList();
+        var scopedTemplates = templates.Models.Where(template =>
+            (!template.BoardId.HasValue || scopedBoardIds.Contains(template.BoardId.Value)) &&
+            (!template.TeamId.HasValue || scopeTeamIds.Contains(template.TeamId.Value))).ToList();
+        var scopedRecurring = recurring.Models.Where(rule => scopedBoardIds.Contains(rule.BoardId)).ToList();
+
         return new EnterprisePlanningViewModel
         {
             Boards = activeBoards,
             Profiles = activeProfiles,
             Teams = teams.Models.Where(x => isAdmin || x.Id == currentProfile.TeamId).OrderBy(x => x.Name).ToList(),
-            Holidays = holidays.Models.OrderBy(x => x.HolidayDate < today).ThenBy(x => x.HolidayDate).ToList(),
-            Absences = absences.Models.OrderByDescending(x => x.StartsOn).ToList(),
-            Baselines = baselines.Models.OrderByDescending(x => x.CreatedAt).ToList(),
-            PortfolioDependencies = dependencies.Models.OrderByDescending(x => x.CreatedAt).ToList(),
-            Templates = templates.Models.OrderBy(x => x.Name).ToList(),
-            RecurringRules = recurring.Models.OrderByDescending(x => x.IsActive).ThenBy(x => x.NextRunAt).ToList(),
+            Holidays = scopedHolidays.OrderBy(x => x.HolidayDate).ToList(),
+            Absences = scopedAbsences.OrderByDescending(x => x.StartsOn).ToList(),
+            Baselines = scopedBaselines.OrderByDescending(x => x.CreatedAt).ToList(),
+            PortfolioDependencies = dependencyList.OrderByDescending(x => x.CreatedAt).ToList(),
+            Templates = scopedTemplates.OrderBy(x => x.Name).ToList(),
+            RecurringRules = scopedRecurring.OrderByDescending(x => x.IsActive).ThenBy(x => x.NextRunAt).ToList(),
             ProjectMetrics = metrics, SelectedTeamId = teamId, SelectedBoardId = boardId,
             CurrentUserTeamId = currentProfile.TeamId, IsAdmin = isAdmin,
             PeriodStart = periodStart, PeriodEnd = periodEnd, EffectiveCapacityMinutes = capacity,
             AllocatedMinutes = allocated, UnassignedMinutes = (int)Math.Round(unassignedMinutes, MidpointRounding.AwayFromZero),
+            UnscheduledMinutes = (int)Math.Round(unscheduledMinutes, MidpointRounding.AwayFromZero),
             OverCapacityDays = overCapacityDays, PeakCapacityUtilizationPercent = peakCapacityUtilization,
-            OpenTasks = scopedTasks.Count(x => x.Status != "done"),
-            OverdueTasks = scopedTasks.Count(x => x.Status != "done" && x.DueDate < today),
+            OpenTasks = periodTasks.Count(x => x.Status != "done"),
+            OverdueTasks = periodTasks.Count(x => x.Status != "done" && x.DueDate < today),
             DependencyConflicts = conflicts.Count
         };
     }
@@ -145,23 +174,43 @@ public class EnterpriseService
         return int.TryParse(value.ToString(), out var parsed) ? parsed : null;
     }
 
-    public async Task AddHolidayAsync(DateTime date, string name, Guid? teamId, Guid actorId)
+    private static string? SnapshotString(Dictionary<string, object?> snapshot, string key) =>
+        snapshot.TryGetValue(key, out var value) ? value?.ToString() : null;
+
+    public async Task AddHolidayAsync(DateTime date, string name, Guid? teamId, Guid actorId, bool isAdmin)
     {
         if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Informe o nome do feriado.");
         if (date == default) throw new InvalidOperationException("Informe a data do feriado.");
         var client = await _clientFactory.CreateForCurrentUserAsync();
+        if (!isAdmin)
+        {
+            var actor = await client.From<Profile>().Where(x => x.Id == actorId).Single()
+                ?? throw new InvalidOperationException("Perfil do usuário não encontrado.");
+            if (!teamId.HasValue || teamId != actor.TeamId)
+                throw new InvalidOperationException("Gestores podem registrar feriados apenas para a própria equipe.");
+        }
         await client.From<CompanyHoliday>().Insert(new CompanyHoliday
         {
             HolidayDate = date.Date, Name = name.Trim(), TeamId = teamId, CreatedBy = actorId, CreatedAt = DateTime.UtcNow
         });
     }
 
-    public async Task AddAbsenceAsync(Guid userId, string type, DateTime startsOn, DateTime endsOn, string? notes, Guid actorId)
+    public async Task AddAbsenceAsync(Guid userId, string type, DateTime startsOn, DateTime endsOn, string? notes, Guid actorId, bool isAdmin)
     {
         if (userId == Guid.Empty) throw new InvalidOperationException("Selecione uma pessoa.");
         if (endsOn.Date < startsOn.Date) throw new InvalidOperationException("O fim da ausência deve ser posterior ao início.");
         if (type is not ("vacation" or "leave" or "training" or "day_off" or "other")) type = "other";
         var client = await _clientFactory.CreateForCurrentUserAsync();
+        var target = await client.From<Profile>().Where(x => x.Id == userId).Single()
+            ?? throw new InvalidOperationException("Pessoa não encontrada.");
+        if (!target.IsActive) throw new InvalidOperationException("Não é possível registrar ausência para uma pessoa inativa.");
+        if (!isAdmin)
+        {
+            var actor = await client.From<Profile>().Where(x => x.Id == actorId).Single()
+                ?? throw new InvalidOperationException("Perfil do usuário não encontrado.");
+            if (target.TeamId != actor.TeamId)
+                throw new InvalidOperationException("Gestores podem registrar ausências apenas para a própria equipe.");
+        }
         await client.From<UserAbsence>().Insert(new UserAbsence
         {
             UserId = userId, AbsenceType = type, StartsOn = startsOn.Date, EndsOn = endsOn.Date,
@@ -232,6 +281,23 @@ public class EnterpriseService
             ?? throw new InvalidOperationException("Projeto não encontrado.");
         if (!board.Settings.Any(x => x.Id == targetStatus))
             throw new InvalidOperationException("A etapa selecionada não existe mais no projeto.");
+        var owner = await client.From<Profile>().Where(x => x.Id == board.OwnerId).Single()
+            ?? throw new InvalidOperationException("Equipe proprietária do projeto não encontrada.");
+        if (templateId.HasValue)
+        {
+            var template = await client.From<TaskTemplate>().Where(x => x.Id == templateId.Value).Single()
+                ?? throw new InvalidOperationException("Modelo não encontrado.");
+            if (template.BoardId.HasValue && template.BoardId != boardId ||
+                template.TeamId.HasValue && template.TeamId != owner.TeamId)
+                throw new InvalidOperationException("O modelo selecionado não é aplicável a este projeto.");
+        }
+        if (assignedTo.HasValue)
+        {
+            var assignee = await client.From<Profile>().Where(x => x.Id == assignedTo.Value).Single()
+                ?? throw new InvalidOperationException("Responsável não encontrado.");
+            if (!assignee.IsActive || assignee.TeamId != owner.TeamId)
+                throw new InvalidOperationException("O responsável deve ser uma pessoa ativa da equipe do projeto.");
+        }
         await client.From<RecurringTaskRule>().Insert(new RecurringTaskRule
         {
             BoardId = boardId, TemplateId = templateId, Title = title.Trim(), Description = description?.Trim(),

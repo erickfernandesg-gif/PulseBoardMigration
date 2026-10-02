@@ -100,4 +100,41 @@ public class WorkRulesTests
             "finish_to_start", new DateTime(2026, 8, 1), new DateTime(2026, 8, 10), 2);
         Assert.Equal(new DateTime(2026, 8, 12), required);
     }
+
+    [Fact]
+    public void IncompleteScheduleDoesNotBecomeWorkForEveryPeriod()
+    {
+        var start = new DateTime(2026, 10, 2);
+
+        Assert.False(PlanningRules.HasCompleteSchedule(start, null));
+        Assert.True(PlanningRules.OverlapsPeriod(start, null, start, start.AddDays(30)));
+        Assert.False(PlanningRules.OverlapsPeriod(null, null, start, start.AddDays(30)));
+    }
+
+    [Theory]
+    [InlineData("2026-10-01", "2026-10-05", true)]
+    [InlineData("2026-09-01", "2026-09-30", false)]
+    [InlineData("2026-11-01", "2026-11-02", false)]
+    public void PeriodOverlapUsesTaskDates(string start, string end, bool expected)
+    {
+        Assert.Equal(expected, PlanningRules.OverlapsPeriod(
+            DateTime.Parse(start), DateTime.Parse(end), new DateTime(2026, 10, 1), new DateTime(2026, 10, 31)));
+    }
+
+    [Fact]
+    public void EstimatedEffortIsProratedToTheSelectedPeriod()
+    {
+        var allocated = PlanningRules.EstimatedMinutesInPeriod(
+            700, new DateTime(2026, 10, 1), new DateTime(2026, 10, 10),
+            new DateTime(2026, 10, 6), new DateTime(2026, 10, 12));
+
+        Assert.Equal(350m, allocated);
+    }
+
+    [Fact]
+    public void UndatedTaskHasNoAllocatedEffortInAReportingPeriod()
+    {
+        Assert.Equal(0m, PlanningRules.EstimatedMinutesInPeriod(
+            480, null, null, new DateTime(2026, 10, 1), new DateTime(2026, 10, 7)));
+    }
 }

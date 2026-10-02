@@ -32,6 +32,8 @@ Para uma instalação nova, execute na ordem:
 17. `planning_governance_scope_fix.sql` — limita alterações de baseline, vínculos, modelos e recorrências ao projeto ou equipe autorizada do gestor.
 18. `billing_governance_upgrade.sql` — vincula contratos e faturas ao projeto, protege taxas históricas, controla aprovação, emissão e cancelamento de rascunhos.
 19. `board_operation_profile_upgrade.sql` — classifica boards como entrega, suporte ou interno; preserva apontamentos e remove SLA apenas quando um board deixa de ser suporte.
+20. `planning_audit_corrections.sql` — alinha a estimativa das novas baselines com o cálculo por tarefas-folha usado na Central de gestão.
+21. `management_schedule_governance_fix.sql` — restringe a leitura e alteração de capacidade à pessoa, à sua equipe gestora ou ao administrador.
 
 Os scripts de upgrade são idempotentes sempre que possível. Alterações de produção devem ser aplicadas como migrações, nunca colando somente trechos isolados sem testar em uma transação.
 

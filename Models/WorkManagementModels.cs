@@ -366,6 +366,8 @@ public class ManagementViewModel
     public DateTime PeriodEnd { get; set; }
     public int OpenTasksWithoutPlanning { get; set; }
     public int OpenUnassignedTasks { get; set; }
+    public int OpenTasksAssignedToInactivePeople { get; set; }
+    public int UndatedBacklogTasks { get; set; }
     public int PeopleWithoutConfiguredCapacity { get; set; }
     public int OverloadedPeople { get; set; }
 }

@@ -21,6 +21,7 @@ public class EnterprisePlanningViewModel
     public int EffectiveCapacityMinutes { get; set; }
     public int AllocatedMinutes { get; set; }
     public int UnassignedMinutes { get; set; }
+    public int UnscheduledMinutes { get; set; }
     public int OverCapacityDays { get; set; }
     public decimal PeakCapacityUtilizationPercent { get; set; }
     public int OpenTasks { get; set; }
