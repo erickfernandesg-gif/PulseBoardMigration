@@ -87,129 +87,26 @@ let ganttMode = 'Week';
 let ganttResizeTimer;
 let ganttInitialized = false;
 
-function initGanttControls() {
-    const dataElement = document.getElementById('gantt-data');
-    if (!dataElement) return;
-    try {
-        ganttAllTasks = JSON.parse(dataElement.textContent || '[]');
-    } catch {
-        showGanttError('Não foi possível interpretar os dados do cronograma.');
-        return;
-    }
-
-    document.querySelectorAll('[data-gantt-mode]').forEach(button => {
-        button.addEventListener('click', () => changeGanttMode(button.dataset.ganttMode));
-    });
-    document.getElementById('ganttToday')?.addEventListener('click', () => {
-        if (typeof window.ganttChartInstance?.scroll_current === 'function') {
-            window.ganttChartInstance.scroll_current();
-        }
-    });
-    window.addEventListener('resize', () => {
-        if (document.getElementById('view-gantt')?.classList.contains('hidden')) return;
-        clearTimeout(ganttResizeTimer);
-        ganttResizeTimer = setTimeout(() => renderGantt(true), 180);
-    });
-}
-
-function ensureGantt() {
-    if (!document.getElementById('gantt-chart')) return;
-    if (!ganttInitialized) renderGantt();
-    else if (window.ganttChartInstance) window.ganttChartInstance.change_view_mode(ganttMode, true);
-}
-
-function filteredGanttTasks() {
-    const month = document.getElementById('filterMonth')?.value || '';
-    const user = document.getElementById('filterUser')?.value || '';
-    return ganttAllTasks.filter(task => {
-        const monthOk = !month || (month === 'inbox' ? !task.targetMonth : task.targetMonth === month);
-        const collaborators = (task.collaborators || '').split(',').filter(Boolean);
-        const userOk = !user || task.assignedTo === user || collaborators.includes(user);
-        return monthOk && userOk;
-    });
-}
-
-function renderGantt(maintainPosition = false) {
-    const chart = document.getElementById('gantt-chart');
-    const scroll = document.getElementById('gantt-scroll');
-    const empty = document.getElementById('ganttEmpty');
-    if (!chart || !scroll || !empty) return;
-    if (typeof window.Gantt !== 'function') {
-        showGanttError('A biblioteca do Gantt não foi carregada. Verifique a conexão com o CDN e atualize a página.');
-        return;
-    }
-
-    const filteredTasks = filteredGanttTasks();
-    const visibleIds = new Set(filteredTasks.map(task => task.id));
-    const tasks = filteredTasks.map(task => ({
-        ...task,
-        dependencies: (task.dependencies || '').split(',').filter(id => visibleIds.has(id)).join(',')
-    }));
-    scroll.classList.toggle('hidden', tasks.length === 0);
-    empty.classList.toggle('hidden', tasks.length > 0);
-    if (tasks.length === 0) {
-        chart.replaceChildren();
-        window.ganttChartInstance = null;
-        ganttInitialized = false;
-        return;
-    }
-
-    const previousScroll = maintainPosition ? scroll.scrollLeft : 0;
-    chart.replaceChildren();
-    try {
-        window.ganttChartInstance = new Gantt('#gantt-chart', tasks, {
-            header_height: 50,
-            column_width: ganttMode === 'Day' ? 38 : ganttMode === 'Month' ? 120 : 42,
-            step: 24,
-            view_mode: ganttMode,
-            // Frappe Gantt 0.6.1 usa a chave ptBr; "pt" deixa a lista de meses
-            // indefinida e causa "Cannot read properties of undefined (reading '0')".
-            language: 'ptBr',
-            on_date_change: (task, start, end) => persistGanttDates(task, start, end),
-            custom_popup_html: task => `
-                <div class="rounded-lg border border-slate-100 bg-white p-3 text-xs shadow-xl">
-                    <div class="mb-1 font-bold text-slate-900">${escapeHtml(task.name)}</div>
-                    <div class="text-slate-500">${escapeHtml(task.responsible || 'Sem responsável')}</div>
-                    <div class="mt-2 text-slate-500">${formatGanttDate(task.start)} → ${formatGanttDate(task.end)}</div>
-                    <div class="mt-1 font-bold text-indigo-600">Progresso: ${Math.round(task.progress || 0)}%</div>
-                </div>`
-        });
-        ganttInitialized = true;
-        hideGanttError();
-        if (maintainPosition) scroll.scrollLeft = previousScroll;
-    } catch (error) {
-        ganttInitialized = false;
-        showGanttError(error?.message || 'Não foi possível montar o cronograma.');
-    }
-}
-
 async function persistGanttDates(task, start, end) {
     const original = ganttAllTasks.find(item => item.id === task.id);
     const startDate = ganttDateValue(start);
     const dueDate = ganttDateValue(end);
     if (!original || !startDate || !dueDate) return;
     try {
-        const result = await postForm('/Boards/UpdateTaskSchedule', { taskId: task.id, startDate, dueDate });
+        const result = await postForm('/Boards/UpdateTaskSchedule', {
+            taskId: task.id,
+            expectedVersion: original.rowVersion,
+            startDate,
+            dueDate
+        });
         if (!result.success) throw new Error(result.message || 'Não foi possível reagendar a tarefa.');
         original.start = startDate;
         original.end = dueDate;
+        original.rowVersion += 1;
     } catch (error) {
         alert(error.message || 'Não foi possível reagendar a tarefa.');
         renderGantt(true);
     }
-}
-
-function changeGanttMode(mode) {
-    if (!['Day', 'Week', 'Month'].includes(mode)) return;
-    ganttMode = mode;
-    document.querySelectorAll('[data-gantt-mode]').forEach(button => {
-        const active = button.dataset.ganttMode === mode;
-        button.classList.toggle('bg-white', active);
-        button.classList.toggle('text-slate-900', active);
-        button.classList.toggle('shadow-sm', active);
-        button.classList.toggle('text-slate-600', !active);
-    });
-    if (window.ganttChartInstance) window.ganttChartInstance.change_view_mode(mode);
 }
 
 function refreshVisibleGantt() {
@@ -654,9 +551,14 @@ window.closeCreateTaskModal = () => {
 window.openTaskDetailsModal = element => {
     const get = name => element.dataset[name] || '';
     const taskId = get('taskId');
+    const canEditTask = get('canEdit') === 'true';
     const editForm = document.getElementById('editTaskForm');
     editForm.reset();
     clearFormError(editForm);
+    editForm.querySelectorAll('input:not([type="hidden"]), textarea, select').forEach(input => {
+        input.disabled = !canEditTask;
+    });
+    editForm.querySelector('button[type="submit"]')?.classList.toggle('hidden', !canEditTask);
     const handoffForm = document.getElementById('handoffTaskForm');
     handoffForm?.reset();
     syncHandoffValidation();
@@ -743,10 +645,84 @@ window.closeTaskDetailsModal = () => {
     modal.classList.remove('flex');
 };
 
-window.confirmDeleteTask = () => {
-    if (!confirm('Arquivar esta tarefa? Conversas, horas e histórico serão preservados.')) return;
+function confirmTaskDeletion({ title, permanentlyDelete }) {
+    const modal = document.getElementById('taskDeletionConfirmModal');
+    const heading = document.getElementById('taskDeletionConfirmTitle');
+    const description = document.getElementById('taskDeletionConfirmDescription');
+    const notice = document.getElementById('taskDeletionConfirmNotice');
+    const cancel = document.getElementById('taskDeletionConfirmCancel');
+    const action = document.getElementById('taskDeletionConfirmAction');
+
+    if (!modal || !heading || !description || !notice || !cancel || !action)
+        return Promise.resolve(false);
+
+    const taskTitle = title || 'esta tarefa';
+    heading.textContent = permanentlyDelete ? 'Excluir tarefa definitivamente?' : 'Arquivar tarefa?';
+    description.textContent = permanentlyDelete
+        ? `Você está prestes a excluir “${taskTitle}”.`
+        : `“${taskTitle}” sairá do fluxo ativo, mas continuará disponível nas tarefas arquivadas.`;
+    notice.textContent = permanentlyDelete
+        ? 'A tarefa será arquivada primeiro. Se houver horas apontadas, subtarefas ou vínculos que exigem histórico, ela permanecerá arquivada para proteger os dados.'
+        : 'Conversas, horas, arquivos e histórico serão preservados. Um gestor poderá restaurar a tarefa quando necessário.';
+    action.textContent = permanentlyDelete ? 'Excluir definitivamente' : 'Arquivar tarefa';
+    action.className = permanentlyDelete
+        ? 'rounded-lg bg-red-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-red-700 focus:outline-none focus:ring-4 focus:ring-red-100'
+        : 'rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-amber-700 focus:outline-none focus:ring-4 focus:ring-amber-100';
+
+    return new Promise(resolve => {
+        const close = confirmed => {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            cancel.removeEventListener('click', cancelAction);
+            action.removeEventListener('click', confirmAction);
+            modal.removeEventListener('click', onBackdropClick);
+            document.removeEventListener('keydown', onKeyDown);
+            resolve(confirmed);
+        };
+        const cancelAction = () => close(false);
+        const confirmAction = () => close(true);
+        const onBackdropClick = event => { if (event.target === modal) close(false); };
+        const onKeyDown = event => { if (event.key === 'Escape') close(false); };
+
+        cancel.addEventListener('click', cancelAction);
+        action.addEventListener('click', confirmAction);
+        modal.addEventListener('click', onBackdropClick);
+        document.addEventListener('keydown', onKeyDown);
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        lucide?.createIcons();
+        action.focus();
+    });
+}
+
+window.confirmDeleteTask = async () => {
+    const title = document.getElementById('EditTitle')?.value?.trim() || 'esta tarefa';
+    if (!await confirmTaskDeletion({ title, permanentlyDelete: false })) return;
     document.getElementById('DeleteTaskId').value = document.getElementById('EditTaskId').value;
     document.getElementById('deleteTaskForm').requestSubmit();
+};
+
+window.confirmPermanentlyDeleteCurrentTask = async () => {
+    const taskId = document.getElementById('EditTaskId')?.value;
+    const title = document.getElementById('EditTitle')?.value?.trim() || 'esta tarefa';
+    if (!taskId) return;
+    if (!await confirmTaskDeletion({ title, permanentlyDelete: true })) return;
+
+    try {
+        const result = await postForm('/Boards/ArchiveAndPermanentlyDeleteTask', { taskId });
+        if (result.success) {
+            window.location.reload();
+            return;
+        }
+        if (result.archived) {
+            alert(`${result.message || 'A exclusão definitiva não foi permitida.'}\n\nA tarefa foi arquivada e pode ser restaurada na seção “Tarefas arquivadas”.`);
+            window.location.reload();
+            return;
+        }
+        throw new Error(result.message || 'Não foi possível excluir a tarefa.');
+    } catch (error) {
+        alert(error.message || 'Não foi possível excluir a tarefa.');
+    }
 };
 
 window.restoreTask = async taskId => {
@@ -755,6 +731,17 @@ window.restoreTask = async taskId => {
         if (!result.success) throw new Error(result.message || 'Não foi possível restaurar a tarefa.');
         window.location.reload();
     } catch (error) { alert(error.message || 'Não foi possível restaurar a tarefa.'); }
+};
+
+window.permanentlyDeleteTask = async (taskId, title) => {
+    if (!await confirmTaskDeletion({ title, permanentlyDelete: true })) return;
+    try {
+        const result = await postForm('/Boards/PermanentlyDeleteTask', { taskId });
+        if (!result.success) throw new Error(result.message || 'Não foi possível excluir a tarefa definitivamente.');
+        window.location.reload();
+    } catch (error) {
+        alert(error.message || 'Não foi possível excluir a tarefa definitivamente.');
+    }
 };
 
 window.toggleChecklist = async (id, completed) => {

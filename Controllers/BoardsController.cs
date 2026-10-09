@@ -279,11 +279,11 @@ public class BoardsController : Controller
     }
 
     [HttpPost]
-    public async Task<IActionResult> UpdateTaskSchedule(Guid taskId, DateTime startDate, DateTime dueDate)
+    public async Task<IActionResult> UpdateTaskSchedule(Guid taskId, long expectedVersion, DateTime startDate, DateTime dueDate)
     {
         try
         {
-            var success = await _boardService.UpdateTaskScheduleAsync(taskId, startDate, dueDate);
+            var success = await _boardService.UpdateTaskScheduleAsync(taskId, expectedVersion, startDate, dueDate);
             return success
                 ? Json(new { success = true })
                 : BadRequest(new { success = false, message = "Tarefa não encontrada ou sem permissão." });
@@ -311,6 +311,35 @@ public class BoardsController : Controller
     {
         try { return Json(new { success = await _boardService.RestoreTaskAsync(taskId) }); }
         catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> PermanentlyDeleteTask(Guid taskId)
+    {
+        try
+        {
+            var deleted = await _boardService.PermanentlyDeleteTaskAsync(taskId);
+            return Json(new { success = deleted, message = deleted ? null : "Tarefa não encontrada ou sem permissão." });
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Exclusão definitiva rejeitada para a tarefa {TaskId}", taskId);
+            return BadRequest(new { success = false, message = exception.Message });
+        }
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> ArchiveAndPermanentlyDeleteTask(Guid taskId)
+    {
+        try
+        {
+            var result = await _boardService.ArchiveAndPermanentlyDeleteTaskAsync(taskId);
+            return Json(new { success = result.Deleted, archived = result.Archived, message = result.Message });
+        }
+        catch (Exception exception)
+        {
+            return BadRequest(new { success = false, archived = false, message = exception.Message });
+        }
     }
 
     [HttpPost]

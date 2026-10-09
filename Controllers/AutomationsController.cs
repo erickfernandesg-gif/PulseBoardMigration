@@ -52,6 +52,6 @@ public class AutomationsController : Controller
     {
         var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         return Guid.TryParse(userId, out var id) && await _boardOperationsService.CanManageBoardAsync(
-            boardId, id, User.IsInRole("admin") || User.IsInRole("manager"));
+            boardId, id);
     }
 }

@@ -34,6 +34,10 @@ Para uma instalação nova, execute na ordem:
 19. `board_operation_profile_upgrade.sql` — classifica boards como entrega, suporte ou interno; preserva apontamentos e remove SLA apenas quando um board deixa de ser suporte.
 20. `planning_audit_corrections.sql` — alinha a estimativa das novas baselines com o cálculo por tarefas-folha usado na Central de gestão.
 21. `management_schedule_governance_fix.sql` — restringe a leitura e alteração de capacidade à pessoa, à sua equipe gestora ou ao administrador.
+22. `board_details_reliability_fix.sql` — aplica concorrência no reagendamento do Gantt e exclusão definitiva segura de tarefas arquivadas.
+23. `board_security_integrity_fix.sql` — restringe o histórico ao escopo autorizado, protege horas/faturamento contra exclusão em cascata e vincula aprovações e operações ao Board correto.
+24. `board_activity_log_indexes.sql` — adiciona índices do feed de atividades usados pelas políticas de acesso e pela tela de detalhes.
+25. `board_activity_log_write_hardening.sql` — bloqueia inserção direta de eventos de auditoria e deixa os fluxos legítimos registrados por rotinas com autorização explícita.
 
 Os scripts de upgrade são idempotentes sempre que possível. Alterações de produção devem ser aplicadas como migrações, nunca colando somente trechos isolados sem testar em uma transação.
 
@@ -44,6 +48,8 @@ Os scripts de upgrade são idempotentes sempre que possível. Alterações de pr
 - Uma tarefa não conclui com dependência ou checklist pendente.
 - Arquivar preserva horas, comentários, arquivos e histórico.
 - Edição com `row_version` antiga é recusada.
+- A exclusão definitiva de tarefa ou Board com apontamentos é recusada; o registro deve permanecer arquivado.
+- Um gerente só decide aprovações dos Boards que administra, salvo quando é o aprovador ou substituto ativo da etapa.
 - Toda atribuição gera registro em `task_assignments` e alerta para o destinatário.
 - A função `generate_billing_invoice` existe e a emissão de fatura ocorre em uma única transação.
 - Uma fatura em rascunho cancelada libera exatamente seus apontamentos; faturas emitidas ou pagas permanecem imutáveis e exigem estorno em processo separado.

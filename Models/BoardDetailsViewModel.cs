@@ -25,11 +25,32 @@ public class BoardDetailsViewModel
     public List<TaskApprovalStep> ApprovalSteps { get; set; } = [];
     public List<ApprovalDelegation> ApprovalDelegations { get; set; } = [];
     public List<TaskTemplate> TaskTemplates { get; set; } = [];
-    public bool CanManageBoard => Board.OwnerId == CurrentUserId ||
-        Profile(CurrentUserId)?.Role is "admin" or "manager";
+    public bool CanManageBoard
+    {
+        get
+        {
+            var current = Profile(CurrentUserId);
+            var owner = Profile(Board.OwnerId);
+            return Board.OwnerId == CurrentUserId || current?.Role == "admin" ||
+                (current?.Role == "manager" && current.TeamId.HasValue && current.TeamId == owner?.TeamId);
+        }
+    }
 
     public Profile? Profile(Guid? id) =>
         id.HasValue ? Profiles.FirstOrDefault(p => p.Id == id.Value) : null;
+
+    public bool CanEditTask(PulseTask task)
+    {
+        var current = Profile(CurrentUserId);
+        var owner = Profile(Board.OwnerId);
+        var assignee = Profile(task.AssignedTo);
+        if (current is not { IsActive: true }) return false;
+        return current.Role == "admin" || Board.OwnerId == CurrentUserId ||
+            task.AssignedTo == CurrentUserId || task.AccountableOwnerId == CurrentUserId ||
+            task.CreatedBy == CurrentUserId || Collaborators.Any(x => x.TaskId == task.Id && x.UserId == CurrentUserId) ||
+            (current.Role == "manager" && current.TeamId.HasValue &&
+             (current.TeamId == assignee?.TeamId || current.TeamId == owner?.TeamId));
+    }
 
     public ClientAccount? Client(Guid? id) =>
         id.HasValue ? Clients.FirstOrDefault(c => c.Id == id.Value) : null;

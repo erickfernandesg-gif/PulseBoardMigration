@@ -32,6 +32,7 @@
             return new
             {
                 id = task.Id.ToString(),
+                rowVersion = task.RowVersion,
                 name = task.Title,
                 start = start.ToString("yyyy-MM-dd"),
                 end = end.ToString("yyyy-MM-dd"),

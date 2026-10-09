@@ -110,26 +110,38 @@ public class BoardService
         var clients = await client.From<ClientAccount>().Get();
         var activeTasks = tasks.Models.Where(t => t.ArchivedAt == null).ToList();
         var taskIds = activeTasks.Select(t => t.Id).ToHashSet();
+        // PostgREST exige ao menos um elemento na operação IN; um UUID vazio
+        // preserva a consulta vazia quando o Board ainda não possui tarefas ativas.
+        var taskIdFilter = (taskIds.Count > 0 ? taskIds : [Guid.Empty]).Cast<object>().ToList();
 
-        var collaborators = await client.From<TaskCollaborator>().Get();
-        var comments = await client.From<TaskComment>().Get();
+        var collaborators = await client.From<TaskCollaborator>()
+            .Filter("task_id", Postgrest.Constants.Operator.In, taskIdFilter).Get();
+        var comments = await client.From<TaskComment>()
+            .Filter("task_id", Postgrest.Constants.Operator.In, taskIdFilter).Get();
         var commentAttachments = new List<TaskCommentAttachment>();
         try
         {
-            var attachmentResponse = await client.From<TaskCommentAttachment>().Get();
+            var attachmentResponse = await client.From<TaskCommentAttachment>()
+                .Filter("task_id", Postgrest.Constants.Operator.In, taskIdFilter).Get();
             commentAttachments = attachmentResponse.Models;
         }
         catch (Postgrest.Exceptions.PostgrestException exception) when (IsMissingChatAttachmentTable(exception))
         {
             _logger.LogWarning("Tabela task_comment_attachments ainda não instalada; detalhes carregados sem anexos.");
         }
-        var timeLogs = await client.From<TimeLog>().Get();
-        var checklists = await client.From<TaskChecklist>().Get();
+        var timeLogs = await client.From<TimeLog>()
+            .Filter("task_id", Postgrest.Constants.Operator.In, taskIdFilter).Get();
+        var checklists = await client.From<TaskChecklist>()
+            .Filter("task_id", Postgrest.Constants.Operator.In, taskIdFilter).Get();
         var activity = await client.From<ActivityLog>().Where(a => a.BoardId == boardId).Get();
-        var assignments = await client.From<TaskAssignment>().Get();
-        var dependencies = await client.From<TaskDependency>().Get();
-        var files = await client.From<TaskFile>().Get();
-        var approvalSteps = await client.From<TaskApprovalStep>().Get();
+        var assignments = await client.From<TaskAssignment>()
+            .Filter("task_id", Postgrest.Constants.Operator.In, taskIdFilter).Get();
+        var dependencies = await client.From<TaskDependency>()
+            .Filter("task_id", Postgrest.Constants.Operator.In, taskIdFilter).Get();
+        var files = await client.From<TaskFile>()
+            .Filter("task_id", Postgrest.Constants.Operator.In, taskIdFilter).Get();
+        var approvalSteps = await client.From<TaskApprovalStep>()
+            .Filter("task_id", Postgrest.Constants.Operator.In, taskIdFilter).Get();
         var approvalDelegations = await client.From<ApprovalDelegation>().Get();
         var templates = await client.From<TaskTemplate>().Where(x => x.IsActive == true).Get();
         var ownerTeamId = profiles.Models.FirstOrDefault(x => x.Id == board.OwnerId)?.TeamId;
@@ -272,22 +284,8 @@ public class BoardService
             }
         }
 
-        if (storagePaths.Count > 0)
-        {
-            try
-            {
-                var storage = _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket);
-                foreach (var batch in storagePaths.Chunk(100))
-                    await storage.Remove(batch.ToList());
-            }
-            catch (Exception exception)
-            {
-                _logger.LogError(exception, "Falha ao remover arquivos privados do quadro {BoardId}; exclusão cancelada", boardId);
-                throw new InvalidOperationException("Não foi possível remover os arquivos privados do projeto. Nenhum dado foi excluído.", exception);
-            }
-        }
-
         await client.From<Board>().Where(x => x.Id == boardId).Delete();
+        await RemoveStorageObjectsAfterDeletionAsync(storagePaths, "quadro", boardId);
         return true;
     }
 
@@ -350,7 +348,7 @@ public class BoardService
             {
                 // The board may have reordered cards after the page was rendered. Use the version
                 // read immediately before the RPC so position-only changes do not block form edits.
-                p_task_id = task.Id, p_expected_version = existingTask.RowVersion,
+                p_task_id = task.Id, p_expected_version = task.RowVersion,
                 p_title = task.Title.Trim(), p_description = task.Description?.Trim(),
                 p_status = task.Status, p_priority = NormalizePriority(task.Priority), p_start_date = task.StartDate,
                 p_due_date = task.DueDate, p_assigned_to = task.AssignedTo, p_client_id = task.ClientId,
@@ -381,22 +379,93 @@ public class BoardService
         return true;
     }
 
-    public async Task<bool> UpdateTaskScheduleAsync(Guid taskId, DateTime startDate, DateTime dueDate)
+    public async Task<bool> UpdateTaskScheduleAsync(Guid taskId, long expectedVersion, DateTime startDate, DateTime dueDate)
     {
         if (taskId == Guid.Empty) throw new InvalidOperationException("Tarefa inválida.");
+        if (expectedVersion <= 0) throw new InvalidOperationException("A versão da tarefa é inválida. Recarregue a página.");
         startDate = startDate.Date;
         dueDate = dueDate.Date;
         if (dueDate < startDate)
             throw new InvalidOperationException("O prazo não pode ser anterior à data de início.");
 
         var client = await _clientFactory.CreateForCurrentUserAsync();
-        var response = await client.From<PulseTask>()
-            .Where(task => task.Id == taskId)
-            .Set(task => task.StartDate, startDate)
-            .Set(task => task.DueDate, dueDate)
-            .Set(task => task.UpdatedAt, DateTime.UtcNow)
-            .Update();
-        return response.Models.Count > 0;
+        try
+        {
+            await client.Rpc("update_task_schedule_atomic", new
+            {
+                p_task_id = taskId,
+                p_expected_version = expectedVersion,
+                p_start_date = startDate,
+                p_due_date = dueDate
+            });
+            return true;
+        }
+        catch (Postgrest.Exceptions.PostgrestException exception)
+        {
+            throw new InvalidOperationException(PostgrestMessage(exception,
+                "Não foi possível atualizar o cronograma da tarefa."), exception);
+        }
+    }
+
+    public async Task<bool> PermanentlyDeleteTaskAsync(Guid taskId)
+    {
+        if (taskId == Guid.Empty) throw new InvalidOperationException("Tarefa inválida.");
+
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var task = await client.From<PulseTask>().Where(x => x.Id == taskId).Single();
+        if (task == null) return false;
+        if (!task.ArchivedAt.HasValue)
+            throw new InvalidOperationException("Arquive a tarefa antes de excluí-la definitivamente.");
+
+        var storagePaths = new HashSet<string>(StringComparer.Ordinal);
+        // O cliente PostgREST não serializa Guid como critério de Filter. A expressão
+        // tipada gera o filtro UUID corretamente antes da exclusão definitiva.
+        var files = await client.From<TaskFile>().Where(file => file.TaskId == taskId).Get();
+        foreach (var file in files.Models)
+            if (!string.IsNullOrWhiteSpace(file.StoragePath)) storagePaths.Add(file.StoragePath);
+
+        try
+        {
+            var attachments = await client.From<TaskCommentAttachment>()
+                .Where(attachment => attachment.TaskId == taskId).Get();
+            foreach (var attachment in attachments.Models)
+                if (!string.IsNullOrWhiteSpace(attachment.StoragePath)) storagePaths.Add(attachment.StoragePath);
+        }
+        catch (Postgrest.Exceptions.PostgrestException exception) when (IsMissingChatAttachmentTable(exception))
+        {
+            _logger.LogInformation("Tabela de anexos do chat indisponível ao excluir a tarefa {TaskId}", taskId);
+        }
+
+        try
+        {
+            await client.Rpc("permanently_delete_archived_task", new { p_task_id = taskId });
+            await RemoveStorageObjectsAfterDeletionAsync(storagePaths, "tarefa", taskId);
+            return true;
+        }
+        catch (Postgrest.Exceptions.PostgrestException exception)
+        {
+            throw new InvalidOperationException(PostgrestMessage(exception,
+                "Não foi possível excluir a tarefa definitivamente."), exception);
+        }
+    }
+
+    public async Task<TaskDeletionAttemptResult> ArchiveAndPermanentlyDeleteTaskAsync(Guid taskId)
+    {
+        // Uma exclusão solicitada a partir da tarefa sempre passa pelo arquivamento.
+        // Se o banco detectar dados que exigem retenção (horas, subtarefas ou
+        // dependências), a tarefa permanece arquivada e pode ser restaurada.
+        await DeleteTaskAsync(taskId);
+        try
+        {
+            var deleted = await PermanentlyDeleteTaskAsync(taskId);
+            return deleted
+                ? new(true, false, null)
+                : new(false, true, "A tarefa foi arquivada, mas não pôde ser excluída definitivamente.");
+        }
+        catch (InvalidOperationException exception)
+        {
+            return new(false, true, exception.Message);
+        }
     }
 
     public async Task<bool> DeleteTaskAsync(Guid taskId)
@@ -405,6 +474,8 @@ public class BoardService
         await client.Rpc("archive_task", new { p_task_id = taskId });
         return true;
     }
+
+    public sealed record TaskDeletionAttemptResult(bool Deleted, bool Archived, string? Message);
 
     public async Task<bool> RestoreTaskAsync(Guid taskId)
     {
@@ -629,6 +700,28 @@ public class BoardService
         "image/gif" => ".gif",
         _ => throw new InvalidOperationException("Formato de imagem não permitido.")
     };
+
+    // Storage não participa da transação PostgreSQL. Primeiro confirmamos a exclusão
+    // no banco; caso o Storage fique indisponível, o objeto restante não tem mais
+    // metadados nem rota de download e fica registrado para limpeza operacional.
+    private async Task RemoveStorageObjectsAfterDeletionAsync(IEnumerable<string> storagePaths, string entityName, Guid entityId)
+    {
+        var paths = storagePaths.Distinct(StringComparer.Ordinal).ToList();
+        if (paths.Count == 0) return;
+
+        try
+        {
+            var storage = _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket);
+            foreach (var batch in paths.Chunk(100))
+                await storage.Remove(batch.ToList());
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception,
+                "A exclusão do banco da {EntityName} {EntityId} foi concluída, mas {StorageObjectCount} objeto(s) privados precisam de limpeza no Storage.",
+                entityName, entityId, paths.Count);
+        }
+    }
 
     private static bool IsMissingChatAttachmentTable(Postgrest.Exceptions.PostgrestException exception) =>
         exception.Content?.Contains("\"code\":\"PGRST205\"", StringComparison.OrdinalIgnoreCase) == true &&

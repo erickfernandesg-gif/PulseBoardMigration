@@ -17,10 +17,17 @@ public class BoardOperationsService
         _boardService = boardService;
     }
 
-    public async Task<bool> CanManageBoardAsync(Guid boardId, Guid userId, bool privileged)
+    public async Task<bool> CanManageBoardAsync(Guid boardId, Guid userId)
     {
-        var board = await (await _clientFactory.CreateForCurrentUserAsync()).From<Board>().Where(x => x.Id == boardId).Single();
-        return board != null && (privileged || board.OwnerId == userId);
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var board = await client.From<Board>().Where(x => x.Id == boardId).Single();
+        if (board == null) return false;
+
+        var profiles = await client.From<Profile>().Get();
+        var current = profiles.Models.FirstOrDefault(x => x.Id == userId);
+        var owner = profiles.Models.FirstOrDefault(x => x.Id == board.OwnerId);
+        return current is { IsActive: true } && (current.Role == "admin" || board.OwnerId == userId ||
+            (current.Role == "manager" && current.TeamId.HasValue && current.TeamId == owner?.TeamId));
     }
 
     public async Task<BoardOperationsViewModel?> GetAsync(Guid boardId)
@@ -118,12 +125,13 @@ public class BoardOperationsService
         });
     }
 
-    public async Task AddApprovalStepAsync(Guid taskId, int sequence, Guid approverId)
+    public async Task AddApprovalStepAsync(Guid boardId, Guid taskId, int sequence, Guid approverId)
     {
         if (taskId == Guid.Empty || approverId == Guid.Empty || sequence < 1) throw new InvalidOperationException("Etapa de aprovação inválida.");
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var task = await client.From<PulseTask>().Where(x => x.Id == taskId).Single()
             ?? throw new InvalidOperationException("Tarefa não encontrada ou sem permissão.");
+        EnsureTaskBelongsToBoard(task, boardId);
         var approver = await client.From<Profile>().Where(x => x.Id == approverId).Single();
         if (approver is not { IsActive: true }) throw new InvalidOperationException("O aprovador selecionado não está ativo.");
         await client.From<TaskApprovalStep>().Insert(new TaskApprovalStep
@@ -131,15 +139,21 @@ public class BoardOperationsService
         await client.Rpc("activate_task_approval_if_required", new { p_task_id = task.Id });
     }
 
-    public async Task DecideApprovalAsync(Guid stepId, string decision, string? note) =>
-        await (await _clientFactory.CreateForCurrentUserAsync()).Rpc("decide_task_approval",
-            new { p_step_id = stepId, p_decision = decision, p_note = note });
+    public async Task DecideApprovalAsync(Guid boardId, Guid stepId, string decision, string? note)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var step = await client.From<TaskApprovalStep>().Where(x => x.Id == stepId).Single()
+            ?? throw new InvalidOperationException("Etapa de aprovação não encontrada.");
+        await EnsureTaskBelongsToBoardAsync(client, step.TaskId, boardId);
+        await client.Rpc("decide_task_approval", new { p_step_id = stepId, p_decision = decision, p_note = note });
+    }
 
-    public async Task DeleteApprovalStepAsync(Guid id)
+    public async Task DeleteApprovalStepAsync(Guid boardId, Guid id)
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var step = await client.From<TaskApprovalStep>().Where(x => x.Id == id).Single()
             ?? throw new InvalidOperationException("Etapa de aprovação não encontrada.");
+        await EnsureTaskBelongsToBoardAsync(client, step.TaskId, boardId);
         await client.From<TaskApprovalStep>().Where(x => x.Id == id).Delete();
         var remaining = await client.From<TaskApprovalStep>().Where(x => x.TaskId == step.TaskId).Get();
         if (remaining.Models.Any(x => x.Status is "waiting" or "pending"))
@@ -159,7 +173,7 @@ public class BoardOperationsService
     public async Task DeleteDelegationAsync(Guid id) =>
         await (await _clientFactory.CreateForCurrentUserAsync()).From<ApprovalDelegation>().Where(x => x.Id == id).Delete();
 
-    public async Task AddMirrorAsync(Guid sourceTaskId, Guid targetTaskId, string fieldName, Guid userId)
+    public async Task AddMirrorAsync(Guid boardId, Guid sourceTaskId, Guid targetTaskId, string fieldName, Guid userId)
     {
         if (sourceTaskId == targetTaskId) throw new InvalidOperationException("Origem e destino devem ser diferentes.");
         var allowed = new[] { "status", "priority", "due_date", "assigned_to" };
@@ -167,6 +181,7 @@ public class BoardOperationsService
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var source = await client.From<PulseTask>().Where(x => x.Id == sourceTaskId).Single()
             ?? throw new InvalidOperationException("Tarefa de origem não encontrada.");
+        EnsureTaskBelongsToBoard(source, boardId);
         var target = await client.From<PulseTask>().Where(x => x.Id == targetTaskId).Single()
             ?? throw new InvalidOperationException("Tarefa de destino não encontrada.");
         if (source.BoardId == target.BoardId)
@@ -184,15 +199,22 @@ public class BoardOperationsService
         { SourceTaskId = sourceTaskId, TargetTaskId = targetTaskId, FieldName = fieldName, CreatedBy = userId, CreatedAt = DateTime.UtcNow });
     }
 
-    public async Task DeleteMirrorAsync(Guid id) =>
-        await (await _clientFactory.CreateForCurrentUserAsync()).From<TaskFieldMirror>().Where(x => x.Id == id).Delete();
+    public async Task DeleteMirrorAsync(Guid boardId, Guid id)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var mirror = await client.From<TaskFieldMirror>().Where(x => x.Id == id).Single()
+            ?? throw new InvalidOperationException("Espelhamento não encontrado.");
+        await EnsureTaskBelongsToBoardAsync(client, mirror.SourceTaskId, boardId);
+        await client.From<TaskFieldMirror>().Where(x => x.Id == id).Delete();
+    }
 
-    public async Task AddCrossProjectDependencyAsync(Guid taskId, Guid dependsOnTaskId)
+    public async Task AddCrossProjectDependencyAsync(Guid boardId, Guid taskId, Guid dependsOnTaskId)
     {
         if (taskId == dependsOnTaskId) throw new InvalidOperationException("Uma tarefa não pode depender dela mesma.");
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var task = await client.From<PulseTask>().Where(x => x.Id == taskId).Single()
             ?? throw new InvalidOperationException("Tarefa não encontrada.");
+        EnsureTaskBelongsToBoard(task, boardId);
         var prerequisite = await client.From<PulseTask>().Where(x => x.Id == dependsOnTaskId).Single()
             ?? throw new InvalidOperationException("Pré-requisito não encontrado.");
         if (task.BoardId == prerequisite.BoardId) throw new InvalidOperationException("Use esta área somente para dependências entre Boards diferentes.");
@@ -200,8 +222,27 @@ public class BoardOperationsService
         { TaskId = taskId, DependsOnTaskId = dependsOnTaskId, DependencyType = "finish_to_start", CreatedAt = DateTime.UtcNow });
     }
 
-    public async Task DeleteCrossProjectDependencyAsync(Guid id) =>
-        await (await _clientFactory.CreateForCurrentUserAsync()).From<TaskDependency>().Where(x => x.Id == id).Delete();
+    public async Task DeleteCrossProjectDependencyAsync(Guid boardId, Guid id)
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        var dependency = await client.From<TaskDependency>().Where(x => x.Id == id).Single()
+            ?? throw new InvalidOperationException("Dependência não encontrada.");
+        await EnsureTaskBelongsToBoardAsync(client, dependency.TaskId, boardId);
+        await client.From<TaskDependency>().Where(x => x.Id == id).Delete();
+    }
+
+    private static void EnsureTaskBelongsToBoard(PulseTask task, Guid boardId)
+    {
+        if (boardId == Guid.Empty || task.BoardId != boardId)
+            throw new InvalidOperationException("A tarefa informada não pertence ao projeto aberto.");
+    }
+
+    private static async Task EnsureTaskBelongsToBoardAsync(Supabase.Client client, Guid taskId, Guid boardId)
+    {
+        var task = await client.From<PulseTask>().Where(x => x.Id == taskId).Single()
+            ?? throw new InvalidOperationException("Tarefa não encontrada ou sem permissão.");
+        EnsureTaskBelongsToBoard(task, boardId);
+    }
 
     public BoardImportPreviewViewModel ParseImport(Guid boardId, Stream stream, string fileName)
     {

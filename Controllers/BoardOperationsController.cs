@@ -47,7 +47,7 @@ public class BoardOperationsController : Controller
     public async Task<IActionResult> AddApproval(Guid boardId, Guid taskId, int sequence, Guid approverId)
     {
         if (!await CanManageBoardAsync(boardId)) return Forbid();
-        try { await _service.AddApprovalStepAsync(taskId, sequence, approverId); TempData["Success"] = "Etapa de aprovação adicionada."; }
+        try { await _service.AddApprovalStepAsync(boardId, taskId, sequence, approverId); TempData["Success"] = "Etapa de aprovação adicionada."; }
         catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index), new { id = boardId });
     }
@@ -56,7 +56,7 @@ public class BoardOperationsController : Controller
     public async Task<IActionResult> DecideApproval(Guid boardId, Guid stepId, string decision, string? note)
     {
         if (!await CanManageBoardAsync(boardId)) return Forbid();
-        try { await _service.DecideApprovalAsync(stepId, decision, note); TempData["Success"] = "Decisão registrada."; }
+        try { await _service.DecideApprovalAsync(boardId, stepId, decision, note); TempData["Success"] = "Decisão registrada."; }
         catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index), new { id = boardId });
     }
@@ -65,7 +65,7 @@ public class BoardOperationsController : Controller
     public async Task<IActionResult> DeleteApproval(Guid boardId, Guid id)
     {
         if (!await CanManageBoardAsync(boardId)) return Forbid();
-        try { await _service.DeleteApprovalStepAsync(id); TempData["Success"] = "Etapa de aprovação removida."; }
+        try { await _service.DeleteApprovalStepAsync(boardId, id); TempData["Success"] = "Etapa de aprovação removida."; }
         catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index), new { id = boardId });
     }
@@ -94,7 +94,7 @@ public class BoardOperationsController : Controller
     {
         if (!await CanManageBoardAsync(boardId)) return Forbid();
         if (!UserId(out var userId)) return Unauthorized();
-        try { await _service.AddMirrorAsync(sourceTaskId, targetTaskId, fieldName, userId); TempData["Success"] = "Espelhamento ativado."; }
+        try { await _service.AddMirrorAsync(boardId, sourceTaskId, targetTaskId, fieldName, userId); TempData["Success"] = "Espelhamento ativado."; }
         catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index), new { id = boardId });
     }
@@ -103,7 +103,7 @@ public class BoardOperationsController : Controller
     public async Task<IActionResult> DeleteMirror(Guid boardId, Guid id)
     {
         if (!await CanManageBoardAsync(boardId)) return Forbid();
-        try { await _service.DeleteMirrorAsync(id); TempData["Success"] = "Espelhamento removido."; }
+        try { await _service.DeleteMirrorAsync(boardId, id); TempData["Success"] = "Espelhamento removido."; }
         catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index), new { id = boardId });
     }
@@ -112,7 +112,7 @@ public class BoardOperationsController : Controller
     public async Task<IActionResult> AddCrossDependency(Guid boardId, Guid taskId, Guid dependsOnTaskId)
     {
         if (!await CanManageBoardAsync(boardId)) return Forbid();
-        try { await _service.AddCrossProjectDependencyAsync(taskId, dependsOnTaskId); TempData["Success"] = "Dependência entre projetos criada."; }
+        try { await _service.AddCrossProjectDependencyAsync(boardId, taskId, dependsOnTaskId); TempData["Success"] = "Dependência entre projetos criada."; }
         catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index), new { id = boardId });
     }
@@ -121,7 +121,7 @@ public class BoardOperationsController : Controller
     public async Task<IActionResult> DeleteCrossDependency(Guid boardId, Guid id)
     {
         if (!await CanManageBoardAsync(boardId)) return Forbid();
-        try { await _service.DeleteCrossProjectDependencyAsync(id); TempData["Success"] = "Dependência removida."; }
+        try { await _service.DeleteCrossProjectDependencyAsync(boardId, id); TempData["Success"] = "Dependência removida."; }
         catch (Exception ex) { TempData["Error"] = ex.Message; }
         return RedirectToAction(nameof(Index), new { id = boardId });
     }
@@ -163,5 +163,5 @@ public class BoardOperationsController : Controller
 
     private bool UserId(out Guid id) => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out id);
     private async Task<bool> CanManageBoardAsync(Guid boardId) => UserId(out var userId) &&
-        await _service.CanManageBoardAsync(boardId, userId, User.IsInRole("admin") || User.IsInRole("manager"));
+        await _service.CanManageBoardAsync(boardId, userId);
 }
