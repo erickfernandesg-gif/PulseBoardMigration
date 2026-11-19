@@ -24,6 +24,7 @@ builder.Services.AddDataProtection()
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<SupabaseClientFactory>();
+builder.Services.AddScoped<CurrentSessionCookieEvents>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<BoardService>();
 builder.Services.AddScoped<WorkspaceService>();
@@ -55,6 +56,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.AccessDeniedPath = "/Auth/AccessDenied";
         options.ExpireTimeSpan = TimeSpan.FromHours(8);
         options.SlidingExpiration = true;
+        options.EventsType = typeof(CurrentSessionCookieEvents);
     });
 builder.Services.AddAuthorization(options =>
 {

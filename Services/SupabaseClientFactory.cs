@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using System.Security.Claims;
 using Supabase;
+using PulseBoardMigration.Models;
 
 namespace PulseBoardMigration.Services;
 
@@ -8,6 +10,7 @@ public class SupabaseClientFactory
 {
     private readonly IConfiguration _configuration;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private Task<Client>? _currentClientTask;
 
     public SupabaseClientFactory(
         IConfiguration configuration,
@@ -33,17 +36,33 @@ public class SupabaseClientFactory
 
     public async Task<Client> CreateForCurrentUserAsync()
     {
-        var client = CreateAnonymousClient();
         var context = _httpContextAccessor.HttpContext;
-
         if (context?.User.Identity?.IsAuthenticated != true)
         {
-            return client;
+            return CreateAnonymousClient();
         }
+        if (_currentClientTask != null) return await _currentClientTask;
+        var authentication = await context.AuthenticateAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        if (authentication.Properties == null) throw new UnauthorizedAccessException("Sessão inválida.");
+        return await (_currentClientTask ??= CreateSessionClientAsync(context.User, authentication.Properties));
+    }
 
-        var currentUserId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        var accessToken = await context.GetTokenAsync("access_token");
-        var refreshToken = await context.GetTokenAsync("refresh_token");
+    // Cookie validation and every service in the request share the same refreshed session.
+    public virtual async Task<Profile> ValidateSessionAsync(ClaimsPrincipal principal, AuthenticationProperties properties)
+    {
+        var client = await (_currentClientTask ??= CreateSessionClientAsync(principal, properties));
+        var id = Guid.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var profile = await client.From<Profile>().Where(item => item.Id == id).Single();
+        if (profile is not { IsActive: true }) throw new UnauthorizedAccessException("Usuário desativado.");
+        return profile;
+    }
+
+    private async Task<Client> CreateSessionClientAsync(ClaimsPrincipal principal, AuthenticationProperties properties)
+    {
+        var client = CreateAnonymousClient();
+        var currentUserId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        var accessToken = properties.GetTokenValue("access_token");
+        var refreshToken = properties.GetTokenValue("refresh_token");
 
         if (string.IsNullOrWhiteSpace(currentUserId) ||
             string.IsNullOrWhiteSpace(accessToken) ||
@@ -63,6 +82,11 @@ public class SupabaseClientFactory
             throw new UnauthorizedAccessException(
                 "A sessão do sistema não corresponde à sessão de acesso ao banco. Saia e entre novamente.");
         }
+
+        var session = client.Auth.CurrentSession
+            ?? throw new UnauthorizedAccessException("Sessão expirada.");
+        properties.UpdateTokenValue("access_token", session.AccessToken ?? accessToken);
+        properties.UpdateTokenValue("refresh_token", session.RefreshToken ?? refreshToken);
 
         return client;
     }
@@ -84,10 +108,28 @@ public class SupabaseClientFactory
 
     private static Client CreateClient(string url, string key)
     {
-        return new Client(url, key, new SupabaseOptions
+        var client = new Client(url, key, new SupabaseOptions
         {
             AutoConnectRealtime = false,
             AutoRefreshToken = false
         });
+        if (key.StartsWith("sb_publishable_", StringComparison.Ordinal) || key.StartsWith("sb_secret_", StringComparison.Ordinal))
+        {
+            // This SDK predates opaque API keys. Keep them in apikey only;
+            // authenticated user JWTs must still flow to every data request.
+            var originalHeaders = client.Postgrest.GetHeaders!;
+            Dictionary<string, string> Headers()
+            {
+                var headers = originalHeaders();
+                if (headers.GetValueOrDefault("Authorization") == $"Bearer {key}")
+                    headers.Remove("Authorization");
+                return headers;
+            }
+            client.Auth.GetHeaders = Headers;
+            client.Postgrest.GetHeaders = Headers;
+            client.Storage.GetHeaders = Headers;
+            client.Functions.GetHeaders = Headers;
+        }
+        return client;
     }
 }

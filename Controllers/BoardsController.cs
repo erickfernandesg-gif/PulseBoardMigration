@@ -169,7 +169,7 @@ public class BoardsController : Controller
                 ClientId = clientId,
                 TargetMonth = targetMonth,
                 EstimatedMinutes = ToEstimatedMinutes(estimatedHours, estimatedMinutes)
-            }, collaboratorIds ?? []);
+            }, collaboratorIds ?? new List<Guid>());
 
             return Json(new
             {
@@ -243,7 +243,7 @@ public class BoardsController : Controller
                 SlaMinutes = slaMinutes.HasValue ? Math.Max(0, slaMinutes.Value) : null,
                 IsBlocked = isBlocked,
                 BlockerReason = blockerReason
-            }, collaboratorIds ?? []);
+            }, collaboratorIds ?? new List<Guid>());
 
             return Json(new
             {
@@ -353,14 +353,14 @@ public class BoardsController : Controller
 
         try
         {
-            var uploads = await ReadChatImagesAsync(images ?? []);
+            var uploads = await ReadChatImagesAsync(images ?? new List<IFormFile>());
             var submission = await _boardService.AddCommentAsync(taskId, userId, content, uploads,
-                replyToId: replyToId, mentionedUserIds: mentionedUserIds ?? []);
+                replyToId: replyToId, mentionedUserIds: mentionedUserIds ?? new List<Guid>());
             return Json(new
             {
                 success = submission.Comment != null,
                 message = submission.Warning,
-                data = submission.Comment
+                data = submission.Comment == null ? null : new { submission.Comment.Id }
             });
         }
         catch (InvalidOperationException exception)
@@ -444,7 +444,7 @@ public class BoardsController : Controller
         var created = await _boardService.AddTaskFileAsync(taskId, userId, file.FileName,
             string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
             stream.ToArray(), description, previousVersionId);
-        return Json(new { success = created != null, data = created });
+        return Json(new { success = created != null, data = created == null ? null : new { created.Id } });
         }
         catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
     }
@@ -520,7 +520,7 @@ public class BoardsController : Controller
         try
         {
             var item = await _boardService.AddChecklistItemAsync(taskId, title, position);
-            return Json(new { success = item != null, data = item });
+            return Json(new { success = item != null, data = item == null ? null : new { item.Id } });
         }
         catch (Exception exception) { return BadRequest(new { success = false, message = exception.Message }); }
     }

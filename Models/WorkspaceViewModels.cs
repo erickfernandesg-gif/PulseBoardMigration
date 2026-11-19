@@ -2,13 +2,13 @@ namespace PulseBoardMigration.Models;
 
 public class AdminViewModel
 {
-    public List<Profile> Profiles { get; set; } = [];
-    public List<Team> Teams { get; set; } = [];
-    public List<UserRate> Rates { get; set; } = [];
-    public List<ClientAccount> Clients { get; set; } = [];
-    public Dictionary<Guid, int> TeamMemberCounts { get; set; } = [];
-    public Dictionary<Guid, int> ClientContractCounts { get; set; } = [];
-    public Dictionary<Guid, int> ClientInvoiceCounts { get; set; } = [];
+    public List<Profile> Profiles { get; set; } = new();
+    public List<Team> Teams { get; set; } = new();
+    public List<UserRate> Rates { get; set; } = new();
+    public List<ClientAccount> Clients { get; set; } = new();
+    public Dictionary<Guid, int> TeamMemberCounts { get; set; } = new();
+    public Dictionary<Guid, int> ClientContractCounts { get; set; } = new();
+    public Dictionary<Guid, int> ClientInvoiceCounts { get; set; } = new();
     public bool IsManager { get; set; }
 }
 
@@ -43,10 +43,10 @@ public class ReportContributorRow
 
 public class ReportsViewModel
 {
-    public List<ReportRow> Rows { get; set; } = [];
-    public List<ReportContributorRow> Contributors { get; set; } = [];
-    public List<Team> Teams { get; set; } = [];
-    public List<Profile> Profiles { get; set; } = [];
+    public List<ReportRow> Rows { get; set; } = new();
+    public List<ReportContributorRow> Contributors { get; set; } = new();
+    public List<Team> Teams { get; set; } = new();
+    public List<Profile> Profiles { get; set; } = new();
     public string? Month { get; set; }
     public Guid? TeamId { get; set; }
     public Guid? UserId { get; set; }
@@ -68,11 +68,11 @@ public class ExecutiveViewModel
 {
     public string FromMonth { get; set; } = DateTime.UtcNow.AddMonths(-2).ToString("yyyy-MM");
     public string ToMonth { get; set; } = DateTime.UtcNow.ToString("yyyy-MM");
-    public List<ExecutiveMetric> Projects { get; set; } = [];
-    public List<ExecutiveMetric> Clients { get; set; } = [];
-    public List<ExecutiveMetric> Workload { get; set; } = [];
-    public List<PerformancePersonMetric> PeoplePerformance { get; set; } = [];
-    public List<ProjectFinancialMetric> ProjectFinancials { get; set; } = [];
+    public List<ExecutiveMetric> Projects { get; set; } = new();
+    public List<ExecutiveMetric> Clients { get; set; } = new();
+    public List<ExecutiveMetric> Workload { get; set; } = new();
+    public List<PerformancePersonMetric> PeoplePerformance { get; set; } = new();
+    public List<ProjectFinancialMetric> ProjectFinancials { get; set; } = new();
     public int EstimatedMinutes => Projects.Sum(x => x.EstimatedMinutes);
     public int LoggedMinutes => Projects.Sum(x => x.LoggedMinutes);
     public decimal TotalCost => Projects.Sum(x => x.Cost);

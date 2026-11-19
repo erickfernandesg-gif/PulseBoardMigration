@@ -38,7 +38,7 @@ public class WorkManagementService
     {
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var preference = await GetNotificationPreferenceAsync(userId);
-        if (!preference.InApp) return [];
+        if (!preference.InApp) return new List<UserNotification>();
         await client.Rpc("ensure_due_notifications", new { });
         var response = await client.From<UserNotification>()
             .Where(x => x.RecipientId == userId)
@@ -306,7 +306,7 @@ public class WorkManagementService
             var workDays = (schedule?.WorkDays ?? "1,2,3,4,5").Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Select(value => int.TryParse(value, out var parsed) ? parsed : 0)
                 .Where(value => value is >= 1 and <= 7).ToHashSet();
-            if (workDays.Count == 0) workDays = [1, 2, 3, 4, 5];
+            if (workDays.Count == 0) workDays = new HashSet<int> { 1, 2, 3, 4, 5 };
             var isoDay = day.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)day.DayOfWeek;
             if (!workDays.Contains(isoDay) ||
                 holidays.Any(x => x.HolidayDate.Date == day && (!x.TeamId.HasValue || x.TeamId == person.TeamId)) ||

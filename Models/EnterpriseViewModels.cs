@@ -2,16 +2,16 @@ namespace PulseBoardMigration.Models;
 
 public class EnterprisePlanningViewModel
 {
-    public List<Board> Boards { get; set; } = [];
-    public List<Profile> Profiles { get; set; } = [];
-    public List<Team> Teams { get; set; } = [];
-    public List<CompanyHoliday> Holidays { get; set; } = [];
-    public List<UserAbsence> Absences { get; set; } = [];
-    public List<ProjectBaseline> Baselines { get; set; } = [];
-    public List<PortfolioDependency> PortfolioDependencies { get; set; } = [];
-    public List<TaskTemplate> Templates { get; set; } = [];
-    public List<RecurringTaskRule> RecurringRules { get; set; } = [];
-    public List<PlanningBoardMetric> ProjectMetrics { get; set; } = [];
+    public List<Board> Boards { get; set; } = new();
+    public List<Profile> Profiles { get; set; } = new();
+    public List<Team> Teams { get; set; } = new();
+    public List<CompanyHoliday> Holidays { get; set; } = new();
+    public List<UserAbsence> Absences { get; set; } = new();
+    public List<ProjectBaseline> Baselines { get; set; } = new();
+    public List<PortfolioDependency> PortfolioDependencies { get; set; } = new();
+    public List<TaskTemplate> Templates { get; set; } = new();
+    public List<RecurringTaskRule> RecurringRules { get; set; } = new();
+    public List<PlanningBoardMetric> ProjectMetrics { get; set; } = new();
     public Guid? SelectedTeamId { get; set; }
     public Guid? SelectedBoardId { get; set; }
     public Guid? CurrentUserTeamId { get; set; }

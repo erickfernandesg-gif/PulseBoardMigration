@@ -46,7 +46,7 @@ public class Board : BaseModel
     public string OperationProfile { get; set; } = "delivery";
 
     [Column("settings")]
-    public List<BoardColumnSetting> Settings { get; set; } = [];
+    public List<BoardColumnSetting> Settings { get; set; } = new();
 
     [Column("planned_start")]
     public DateTime? PlannedStart { get; set; }

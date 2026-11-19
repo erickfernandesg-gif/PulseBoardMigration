@@ -134,9 +134,8 @@ public class BoardOperationsService
         EnsureTaskBelongsToBoard(task, boardId);
         var approver = await client.From<Profile>().Where(x => x.Id == approverId).Single();
         if (approver is not { IsActive: true }) throw new InvalidOperationException("O aprovador selecionado não está ativo.");
-        await client.From<TaskApprovalStep>().Insert(new TaskApprovalStep
-        { TaskId = task.Id, Sequence = sequence, ApproverId = approverId, Status = "waiting", CreatedAt = DateTime.UtcNow });
-        await client.Rpc("activate_task_approval_if_required", new { p_task_id = task.Id });
+        await client.Rpc("add_task_approval_step", new
+        { p_task_id = task.Id, p_sequence = sequence, p_approver_id = approverId });
     }
 
     public async Task DecideApprovalAsync(Guid boardId, Guid stepId, string decision, string? note)
@@ -154,12 +153,7 @@ public class BoardOperationsService
         var step = await client.From<TaskApprovalStep>().Where(x => x.Id == id).Single()
             ?? throw new InvalidOperationException("Etapa de aprovação não encontrada.");
         await EnsureTaskBelongsToBoardAsync(client, step.TaskId, boardId);
-        await client.From<TaskApprovalStep>().Where(x => x.Id == id).Delete();
-        var remaining = await client.From<TaskApprovalStep>().Where(x => x.TaskId == step.TaskId).Get();
-        if (remaining.Models.Any(x => x.Status is "waiting" or "pending"))
-            await client.Rpc("activate_task_approval_if_required", new { p_task_id = step.TaskId });
-        else
-            await client.From<PulseTask>().Where(x => x.Id == step.TaskId).Set(x => x.WorkflowState, "inbox").Update();
+        await client.Rpc("delete_task_approval_step", new { p_step_id = id });
     }
 
     public async Task AddDelegationAsync(Guid delegatorId, Guid substituteId, DateTime startsOn, DateTime endsOn, Guid userId)
@@ -190,8 +184,8 @@ public class BoardOperationsService
         {
             var sourceBoard = await client.From<Board>().Where(x => x.Id == source.BoardId).Single();
             var targetBoard = await client.From<Board>().Where(x => x.Id == target.BoardId).Single();
-            var sourceStages = sourceBoard?.Settings.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
-            var targetStages = targetBoard?.Settings.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? [];
+            var sourceStages = sourceBoard?.Settings.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>();
+            var targetStages = targetBoard?.Settings.Select(x => x.Id).ToHashSet(StringComparer.OrdinalIgnoreCase) ?? new HashSet<string>();
             if (!sourceStages.SetEquals(targetStages))
                 throw new InvalidOperationException("Para espelhar status, os dois Boards precisam possuir as mesmas etapas.");
         }
@@ -258,7 +252,7 @@ public class BoardOperationsService
         string? statusColumn, string? priorityColumn, string? dueDateColumn, Guid userId)
     {
         if (string.IsNullOrWhiteSpace(payload) || payload.Length > 1_800_000) throw new InvalidOperationException("Conteúdo de importação inválido.");
-        var rows = JsonConvert.DeserializeObject<List<Dictionary<string, string>>>(payload) ?? [];
+        var rows = JsonConvert.DeserializeObject<List<Dictionary<string, string>>>(payload) ?? new List<Dictionary<string, string>>();
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var board = await client.From<Board>().Where(x => x.Id == boardId).Single()
             ?? throw new InvalidOperationException("Board não encontrado ou sem permissão.");
@@ -295,7 +289,7 @@ public class BoardOperationsService
         using var reader = new StreamReader(stream, leaveOpen: true);
         var lines = new List<string>();
         while (reader.ReadLine() is { } line) lines.Add(line);
-        if (lines.Count == 0) return [];
+        if (lines.Count == 0) return new List<Dictionary<string, string>>();
         var delimiter = lines[0].Count(x => x == ';') > lines[0].Count(x => x == ',') ? ';' : ',';
         var headers = SplitCsv(lines[0], delimiter);
         return lines.Skip(1).Where(x => !string.IsNullOrWhiteSpace(x)).Select(line =>
@@ -327,11 +321,11 @@ public class BoardOperationsService
         if (exact != null) return exact.Id;
         string[] aliases = normalized switch
         {
-            "working on it" or "em andamento" or "em execucao" or "in-progress" => ["in-progress", "andamento", "execucao", "progresso"],
-            "done" or "feito" or "concluido" or "concluida" => ["done", "feito", "concluido", "concluida"],
-            "homologacao" or "teste" or "em teste" => ["homologation", "homologacao", "teste"],
-            "agendado" or "planejado" or "todo" or "a fazer" => ["todo", "planejado", "agendado", "fazer"],
-            _ => []
+            "working on it" or "em andamento" or "em execucao" or "in-progress" => new[] { "in-progress", "andamento", "execucao", "progresso" },
+            "done" or "feito" or "concluido" or "concluida" => new[] { "done", "feito", "concluido", "concluida" },
+            "homologacao" or "teste" or "em teste" => new[] { "homologation", "homologacao", "teste" },
+            "agendado" or "planejado" or "todo" or "a fazer" => new[] { "todo", "planejado", "agendado", "fazer" },
+            _ => Array.Empty<string>()
         };
         var semantic = settings.FirstOrDefault(column => aliases.Any(alias =>
             NormalizeText(column.Id).Contains(alias) || NormalizeText(column.Title).Contains(alias)));

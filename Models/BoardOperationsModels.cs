@@ -58,29 +58,29 @@ public class TaskFieldMirror : BaseModel
 public class BoardOperationsViewModel
 {
     public Board Board { get; set; } = new();
-    public List<Board> Boards { get; set; } = [];
-    public List<PulseTask> Tasks { get; set; } = [];
-    public List<Profile> Profiles { get; set; } = [];
-    public List<AutomationRule> Automations { get; set; } = [];
-    public List<TaskApprovalStep> ApprovalSteps { get; set; } = [];
-    public List<ApprovalDelegation> Delegations { get; set; } = [];
-    public List<TaskFieldMirror> Mirrors { get; set; } = [];
-    public List<TaskDependency> CrossDependencies { get; set; } = [];
-    public List<TaskFieldHistory> FieldHistory { get; set; } = [];
+    public List<Board> Boards { get; set; } = new();
+    public List<PulseTask> Tasks { get; set; } = new();
+    public List<Profile> Profiles { get; set; } = new();
+    public List<AutomationRule> Automations { get; set; } = new();
+    public List<TaskApprovalStep> ApprovalSteps { get; set; } = new();
+    public List<ApprovalDelegation> Delegations { get; set; } = new();
+    public List<TaskFieldMirror> Mirrors { get; set; } = new();
+    public List<TaskDependency> CrossDependencies { get; set; } = new();
+    public List<TaskFieldHistory> FieldHistory { get; set; } = new();
 }
 
 public class AutomationEditorViewModel
 {
     public Guid? BoardId { get; set; }
     public Board? Board { get; set; }
-    public List<AutomationRule> Rules { get; set; } = [];
-    public List<Profile> Profiles { get; set; } = [];
+    public List<AutomationRule> Rules { get; set; } = new();
+    public List<Profile> Profiles { get; set; } = new();
 }
 
 public class BoardImportPreviewViewModel
 {
     public Guid BoardId { get; set; }
-    public List<string> Headers { get; set; } = [];
-    public List<Dictionary<string, string>> Rows { get; set; } = [];
+    public List<string> Headers { get; set; } = new();
+    public List<Dictionary<string, string>> Rows { get; set; } = new();
     public string Payload { get; set; } = string.Empty;
 }

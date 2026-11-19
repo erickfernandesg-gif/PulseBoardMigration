@@ -4,27 +4,27 @@ public class BoardDetailsViewModel
 {
     public Guid CurrentUserId { get; set; }
     public Board Board { get; set; } = new();
-    public List<PulseTask> Tasks { get; set; } = [];
-    public List<PulseTask> ArchivedTasks { get; set; } = [];
-    public List<Column> Columns { get; set; } = [];
-    public List<Profile> Profiles { get; set; } = [];
-    public List<ClientAccount> Clients { get; set; } = [];
-    public List<TaskCollaborator> Collaborators { get; set; } = [];
-    public List<TaskComment> Comments { get; set; } = [];
-    public List<TaskCommentAttachment> CommentAttachments { get; set; } = [];
-    public List<TimeLog> TimeLogs { get; set; } = [];
-    public List<TaskChecklist> Checklists { get; set; } = [];
-    public List<ActivityLog> Activity { get; set; } = [];
-    public List<TaskAssignment> Assignments { get; set; } = [];
-    public List<TaskDependency> Dependencies { get; set; } = [];
+    public List<PulseTask> Tasks { get; set; } = new();
+    public List<PulseTask> ArchivedTasks { get; set; } = new();
+    public List<Column> Columns { get; set; } = new();
+    public List<Profile> Profiles { get; set; } = new();
+    public List<ClientAccount> Clients { get; set; } = new();
+    public List<TaskCollaborator> Collaborators { get; set; } = new();
+    public List<TaskComment> Comments { get; set; } = new();
+    public List<TaskCommentAttachment> CommentAttachments { get; set; } = new();
+    public List<TimeLog> TimeLogs { get; set; } = new();
+    public List<TaskChecklist> Checklists { get; set; } = new();
+    public List<ActivityLog> Activity { get; set; } = new();
+    public List<TaskAssignment> Assignments { get; set; } = new();
+    public List<TaskDependency> Dependencies { get; set; } = new();
     // Pré-requisitos de outros projetos, carregados separadamente para que o
     // detalhe da tarefa explique bloqueios externos sem misturá-los ao Kanban.
-    public List<PulseTask> ExternalDependencyTasks { get; set; } = [];
-    public List<Board> ExternalDependencyBoards { get; set; } = [];
-    public List<TaskFile> Files { get; set; } = [];
-    public List<TaskApprovalStep> ApprovalSteps { get; set; } = [];
-    public List<ApprovalDelegation> ApprovalDelegations { get; set; } = [];
-    public List<TaskTemplate> TaskTemplates { get; set; } = [];
+    public List<PulseTask> ExternalDependencyTasks { get; set; } = new();
+    public List<Board> ExternalDependencyBoards { get; set; } = new();
+    public List<TaskFile> Files { get; set; } = new();
+    public List<TaskApprovalStep> ApprovalSteps { get; set; } = new();
+    public List<ApprovalDelegation> ApprovalDelegations { get; set; } = new();
+    public List<TaskTemplate> TaskTemplates { get; set; } = new();
     public bool CanManageBoard
     {
         get

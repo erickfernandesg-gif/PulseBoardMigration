@@ -84,7 +84,7 @@ public class PulseTask : BaseModel
     public DateTime? RecurrenceScheduledAt { get; set; }
 
     [Column("custom_fields")]
-    public Dictionary<string, object?> CustomFields { get; set; } = [];
+    public Dictionary<string, object?> CustomFields { get; set; } = new();
 
     [Column("sla_minutes")]
     public int? SlaMinutes { get; set; }

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:7.0 AS build
 WORKDIR /src
 
 COPY PulseBoardMigration.csproj ./
@@ -11,7 +11,7 @@ RUN dotnet publish PulseBoardMigration.csproj \
     --no-restore \
     /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:7.0 AS final
 WORKDIR /app
 
 ENV ASPNETCORE_URLS=http://+:10000 \
@@ -20,8 +20,10 @@ ENV ASPNETCORE_URLS=http://+:10000 \
 
 EXPOSE 10000
 COPY --from=build /app/publish ./
-RUN mkdir -p /app/App_Data/keys \
-    && chown -R $APP_UID /app/App_Data
+RUN groupadd --gid 1654 app \
+    && useradd --uid 1654 --gid app --no-create-home app \
+    && mkdir -p /app/App_Data/keys \
+    && chown -R app:app /app/App_Data
 
-USER $APP_UID
+USER 1654:1654
 ENTRYPOINT ["dotnet", "PulseBoardMigration.dll"]

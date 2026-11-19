@@ -7,6 +7,7 @@ namespace PulseBoardMigration.Services;
 public class BoardService
 {
     private const string TaskChatBucket = "task-chat";
+    private const string TaskFilesBucket = "task-files";
     private readonly SupabaseClientFactory _clientFactory;
     private readonly ILogger<BoardService> _logger;
 
@@ -39,14 +40,14 @@ public class BoardService
             PlannedEnd = plannedEnd?.Date,
             BudgetAmount = budgetAmount.HasValue ? Math.Max(0, budgetAmount.Value) : null,
             CreatedAt = DateTime.UtcNow,
-            Settings =
-            [
+            Settings = new()
+            {
                 new() { Id = "backlog", Title = "Caixa de Entrada" },
                 new() { Id = "todo", Title = "A Fazer" },
                 new() { Id = "in-progress", Title = "Em Execução" },
                 new() { Id = "homologation", Title = "Homologação" },
                 new() { Id = "done", Title = "Concluído" }
-            ]
+            }
         };
 
         try
@@ -112,7 +113,7 @@ public class BoardService
         var taskIds = activeTasks.Select(t => t.Id).ToHashSet();
         // PostgREST exige ao menos um elemento na operação IN; um UUID vazio
         // preserva a consulta vazia quando o Board ainda não possui tarefas ativas.
-        var taskIdFilter = (taskIds.Count > 0 ? taskIds : [Guid.Empty]).Cast<object>().ToList();
+        var taskIdFilter = (taskIds.Count > 0 ? taskIds : new HashSet<Guid> { Guid.Empty }).Cast<object>().ToList();
 
         var collaborators = await client.From<TaskCollaborator>()
             .Filter("task_id", Postgrest.Constants.Operator.In, taskIdFilter).Get();
@@ -163,12 +164,12 @@ public class BoardService
 
         var settings = board.Settings?.Count > 0
             ? board.Settings
-            :
-            [
+            : new List<BoardColumnSetting>
+            {
                 new() { Id = "todo", Title = "A Fazer" },
                 new() { Id = "in-progress", Title = "Em Execução" },
                 new() { Id = "done", Title = "Concluído" }
-            ];
+            };
 
         return new BoardDetailsViewModel
         {
@@ -317,7 +318,7 @@ public class BoardService
             p_accountable_owner_id = task.AccountableOwnerId, p_created_by = task.CreatedBy,
             p_workflow_state = task.WorkflowState, p_client_id = task.ClientId, p_target_month = task.TargetMonth,
             p_estimated_minutes = task.EstimatedMinutes, p_parent_task_id = task.ParentTaskId,
-            p_collaborator_ids = (collaboratorIds ?? []).Where(id => id != Guid.Empty).Distinct().ToArray()
+            p_collaborator_ids = (collaboratorIds ?? Array.Empty<Guid>()).Where(id => id != Guid.Empty).Distinct().ToArray()
         });
         return await client.From<PulseTask>().Where(existing => existing.Id == task.Id).Single();
     }
@@ -358,7 +359,7 @@ public class BoardService
                 // longer editable because billing is contract/hour based.
                 p_planned_value = existingTask.PlannedValue, p_custom_fields = existingTask.CustomFields,
                 p_is_blocked = task.IsBlocked, p_blocker_reason = task.BlockerReason,
-                p_collaborator_ids = (collaboratorIds ?? []).Where(id => id != Guid.Empty).Distinct().ToArray()
+                p_collaborator_ids = (collaboratorIds ?? Array.Empty<Guid>()).Where(id => id != Guid.Empty).Distinct().ToArray()
             });
         }
         catch (Postgrest.Exceptions.PostgrestException exception)
@@ -493,7 +494,7 @@ public class BoardService
         Guid? replyToId = null,
         IReadOnlyList<Guid>? mentionedUserIds = null)
     {
-        images ??= [];
+        images ??= Array.Empty<CommentImageUpload>();
         var normalizedContent = content?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(normalizedContent) && images.Count == 0)
             throw new InvalidOperationException("Escreva uma mensagem ou anexe uma imagem.");
@@ -523,7 +524,7 @@ public class BoardService
         var comment = response.Models.FirstOrDefault();
         if (comment == null) return new TaskCommentSubmissionResult(null);
         string? mentionWarning = null;
-        foreach (var mentionedUserId in (mentionedUserIds ?? []).Where(id => id != Guid.Empty && id != userId).Distinct())
+        foreach (var mentionedUserId in (mentionedUserIds ?? Array.Empty<Guid>()).Where(id => id != Guid.Empty && id != userId).Distinct())
         {
             try
             {
@@ -662,8 +663,8 @@ public class BoardService
         }
         var safeExtension = Path.GetExtension(fileName).ToLowerInvariant();
         if (safeExtension.Length > 10) safeExtension = string.Empty;
-        var storagePath = $"files/{task.BoardId:N}/{taskId:N}/{Guid.NewGuid():N}{safeExtension}";
-        await _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket).Upload(content, storagePath,
+        var storagePath = $"attachments/{task.BoardId:N}/{taskId:N}/{Guid.NewGuid():N}{safeExtension}";
+        await _clientFactory.CreateServiceClient().Storage.From(TaskFilesBucket).Upload(content, storagePath,
             new Supabase.Storage.FileOptions { CacheControl = "3600", ContentType = contentType, Upsert = false });
         try
         {
@@ -677,7 +678,7 @@ public class BoardService
         }
         catch
         {
-            await _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket).Remove([storagePath]);
+            await _clientFactory.CreateServiceClient().Storage.From(TaskFilesBucket).Remove(new List<string> { storagePath });
             throw;
         }
     }
@@ -687,7 +688,7 @@ public class BoardService
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var file = await client.From<TaskFile>().Where(x => x.Id == id).Single();
         if (file == null) return null;
-        var bytes = await _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket)
+        var bytes = await _clientFactory.CreateServiceClient().Storage.From(StorageBucketForPath(file.StoragePath))
             .Download(file.StoragePath, (EventHandler<float>?)null);
         return new CommentAttachmentContent(file.FileName, file.ContentType, bytes);
     }
@@ -701,6 +702,9 @@ public class BoardService
         _ => throw new InvalidOperationException("Formato de imagem não permitido.")
     };
 
+    private static string StorageBucketForPath(string path) =>
+        path.StartsWith("attachments/", StringComparison.Ordinal) ? TaskFilesBucket : TaskChatBucket;
+
     // Storage não participa da transação PostgreSQL. Primeiro confirmamos a exclusão
     // no banco; caso o Storage fique indisponível, o objeto restante não tem mais
     // metadados nem rota de download e fica registrado para limpeza operacional.
@@ -711,9 +715,10 @@ public class BoardService
 
         try
         {
-            var storage = _clientFactory.CreateServiceClient().Storage.From(TaskChatBucket);
-            foreach (var batch in paths.Chunk(100))
-                await storage.Remove(batch.ToList());
+            var client = _clientFactory.CreateServiceClient();
+            foreach (var group in paths.GroupBy(StorageBucketForPath))
+                foreach (var batch in group.Chunk(100))
+                    await client.Storage.From(group.Key).Remove(batch.ToList());
         }
         catch (Exception exception)
         {
@@ -816,7 +821,7 @@ public class BoardService
 
         var validStatuses = board.Settings?.Count > 0
             ? board.Settings.Select(column => column.Id)
-            : ["todo", "in-progress", "done"];
+            : new[] { "todo", "in-progress", "done" };
         if (!validStatuses.Contains(status, StringComparer.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("A etapa selecionada não existe neste quadro.");

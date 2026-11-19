@@ -171,7 +171,7 @@ public class ProjectBaseline : BaseModel
     [Column("planned_start")] public DateTime? PlannedStart { get; set; }
     [Column("planned_end")] public DateTime? PlannedEnd { get; set; }
     [Column("budget_amount")] public decimal? BudgetAmount { get; set; }
-    [Column("snapshot")] public Dictionary<string, object?> Snapshot { get; set; } = [];
+    [Column("snapshot")] public Dictionary<string, object?> Snapshot { get; set; } = new();
     [Column("is_active")] public bool IsActive { get; set; }
     [Column("created_by")] public Guid? CreatedBy { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; }
@@ -199,7 +199,7 @@ public class TaskTemplate : BaseModel
     [Column("description")] public string? Description { get; set; }
     [Column("board_id")] public Guid? BoardId { get; set; }
     [Column("team_id")] public Guid? TeamId { get; set; }
-    [Column("definition")] public Dictionary<string, object?> Definition { get; set; } = [];
+    [Column("definition")] public Dictionary<string, object?> Definition { get; set; } = new();
     [Column("is_active")] public bool IsActive { get; set; } = true;
     [Column("created_by")] public Guid? CreatedBy { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; }
@@ -223,7 +223,7 @@ public class RecurringTaskRule : BaseModel
     [Column("estimated_minutes")] public int EstimatedMinutes { get; set; }
     [Column("due_after_days")] public int DueAfterDays { get; set; }
     [Column("is_active")] public bool IsActive { get; set; } = true;
-    [Column("custom_fields")] public Dictionary<string, object?> CustomFields { get; set; } = [];
+    [Column("custom_fields")] public Dictionary<string, object?> CustomFields { get; set; } = new();
     [Column("created_by")] public Guid? CreatedBy { get; set; }
     [Column("created_at")] public DateTime CreatedAt { get; set; }
     [Column("last_run_at")] public DateTime? LastRunAt { get; set; }
@@ -287,11 +287,11 @@ public class WorkspaceSearchResult : BaseModel
 public class MyWorkViewModel
 {
     public Guid CurrentUserId { get; set; }
-    public List<PulseTask> Tasks { get; set; } = [];
-    public List<Board> Boards { get; set; } = [];
-    public List<Profile> Profiles { get; set; } = [];
-    public List<TaskAssignment> Assignments { get; set; } = [];
-    public List<TaskFollower> Followers { get; set; } = [];
+    public List<PulseTask> Tasks { get; set; } = new();
+    public List<Board> Boards { get; set; } = new();
+    public List<Profile> Profiles { get; set; } = new();
+    public List<TaskAssignment> Assignments { get; set; } = new();
+    public List<TaskFollower> Followers { get; set; } = new();
     public Profile? CurrentUser => Profiles.FirstOrDefault(x => x.Id == CurrentUserId);
     public bool CanManage => CurrentUser?.Role is "admin" or "manager";
     public IReadOnlyList<TaskAssignment> PendingAssignments => Assignments
@@ -352,16 +352,16 @@ public class MyWorkViewModel
 public class ManagementViewModel
 {
     public Profile CurrentUser { get; set; } = new();
-    public List<Profile> Profiles { get; set; } = [];
-    public List<Team> Teams { get; set; } = [];
-    public List<Board> Boards { get; set; } = [];
-    public List<PulseTask> Tasks { get; set; } = [];
-    public List<WorkSchedule> Schedules { get; set; } = [];
-    public List<TaskAssignment> Assignments { get; set; } = [];
-    public List<CompanyHoliday> Holidays { get; set; } = [];
-    public List<UserAbsence> Absences { get; set; } = [];
-    public List<PerformancePersonMetric> Performance { get; set; } = [];
-    public List<ManagementPersonWorkload> Workloads { get; set; } = [];
+    public List<Profile> Profiles { get; set; } = new();
+    public List<Team> Teams { get; set; } = new();
+    public List<Board> Boards { get; set; } = new();
+    public List<PulseTask> Tasks { get; set; } = new();
+    public List<WorkSchedule> Schedules { get; set; } = new();
+    public List<TaskAssignment> Assignments { get; set; } = new();
+    public List<CompanyHoliday> Holidays { get; set; } = new();
+    public List<UserAbsence> Absences { get; set; } = new();
+    public List<PerformancePersonMetric> Performance { get; set; } = new();
+    public List<ManagementPersonWorkload> Workloads { get; set; } = new();
     public DateTime PeriodStart { get; set; }
     public DateTime PeriodEnd { get; set; }
     public int OpenTasksWithoutPlanning { get; set; }
@@ -414,10 +414,10 @@ public class CompanyScheduleViewModel
 {
     public DateTime From { get; set; }
     public DateTime To { get; set; }
-    public List<ScheduleRow> Rows { get; set; } = [];
-    public List<ProjectMilestone> Milestones { get; set; } = [];
-    public List<Board> Boards { get; set; } = [];
-    public List<PortfolioDependency> PortfolioDependencies { get; set; } = [];
+    public List<ScheduleRow> Rows { get; set; } = new();
+    public List<ProjectMilestone> Milestones { get; set; } = new();
+    public List<Board> Boards { get; set; } = new();
+    public List<PortfolioDependency> PortfolioDependencies { get; set; } = new();
     public Board? Board(Guid id) => Boards.FirstOrDefault(x => x.Id == id);
 }
 
@@ -425,15 +425,15 @@ public class BillingViewModel
 {
     public string Month { get; set; } = DateTime.UtcNow.ToString("yyyy-MM");
     public Profile? CurrentUser { get; set; }
-    public List<TimeLog> Logs { get; set; } = [];
-    public List<PulseTask> Tasks { get; set; } = [];
-    public List<Board> Boards { get; set; } = [];
-    public List<Profile> Profiles { get; set; } = [];
-    public List<ClientAccount> Clients { get; set; } = [];
-    public List<ClientContract> Contracts { get; set; } = [];
-    public HashSet<Guid> ContractIdsWithInvoices { get; set; } = [];
-    public List<BillingInvoice> Invoices { get; set; } = [];
-    public List<BillingInvoiceItem> InvoiceItems { get; set; } = [];
+    public List<TimeLog> Logs { get; set; } = new();
+    public List<PulseTask> Tasks { get; set; } = new();
+    public List<Board> Boards { get; set; } = new();
+    public List<Profile> Profiles { get; set; } = new();
+    public List<ClientAccount> Clients { get; set; } = new();
+    public List<ClientContract> Contracts { get; set; } = new();
+    public HashSet<Guid> ContractIdsWithInvoices { get; set; } = new();
+    public List<BillingInvoice> Invoices { get; set; } = new();
+    public List<BillingInvoiceItem> InvoiceItems { get; set; } = new();
     public decimal ApprovedUnbilled => Logs.Where(x => x.ApprovalStatus == "approved" && x.BillingStatus == "unbilled" && x.IsBillable).Sum(x => x.BillableAmount);
     public IReadOnlyList<TimeLog> UnratedLogs => Logs
         .Where(x => x.IsBillable && x.BillingStatus == "unbilled" && x.BillingRateSnapshot <= 0)

@@ -385,7 +385,7 @@ public class EnterpriseService
                 .OrderByDescending(x => x.ValidFrom).FirstOrDefault();
         var workDays = (schedule?.WorkDays ?? "1,2,3,4,5").Split(',', StringSplitOptions.RemoveEmptyEntries)
             .Select(value => int.TryParse(value, out var day) ? day : 0).Where(day => day is >= 1 and <= 7).ToHashSet();
-        if (workDays.Count == 0) workDays = [1, 2, 3, 4, 5];
+        if (workDays.Count == 0) workDays = new HashSet<int> { 1, 2, 3, 4, 5 };
         var dailyMinutes = (schedule?.WeeklyCapacityMinutes ?? 2400) / workDays.Count;
         var isoDay = day.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)day.DayOfWeek;
         if (!workDays.Contains(isoDay)) return 0;
@@ -408,12 +408,12 @@ public class EnterpriseService
 
     public async Task<List<WorkspaceSearchResult>> SearchAsync(string query)
     {
-        if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2) return [];
+        if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2) return new List<WorkspaceSearchResult>();
         var client = await _clientFactory.CreateForCurrentUserAsync();
         var response = await client.Rpc<List<WorkspaceSearchResult>>("search_workspace", new
         {
             search_query = query.Trim(), result_limit = 40
         });
-        return response ?? [];
+        return response ?? new List<WorkspaceSearchResult>();
     }
 }

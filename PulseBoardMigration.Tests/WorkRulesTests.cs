@@ -30,7 +30,7 @@ public class WorkRulesTests
         var parent = new PulseTask { Id = Guid.NewGuid(), EstimatedMinutes = 480 };
         var child = new PulseTask { Id = Guid.NewGuid(), ParentTaskId = parent.Id, EstimatedMinutes = 180 };
 
-        var effort = WorkRules.LeafTasksForEffort([parent, child]);
+        var effort = WorkRules.LeafTasksForEffort(new[] { parent, child });
 
         Assert.Single(effort);
         Assert.Equal(child.Id, effort[0].Id);
@@ -74,17 +74,17 @@ public class WorkRulesTests
     {
         var a = Guid.NewGuid(); var b = Guid.NewGuid(); var c = Guid.NewGuid(); var shortTask = Guid.NewGuid();
         var result = CriticalPathRules.Calculate(
-            [(a, 60), (b, 120), (c, 30), (shortTask, 10)],
-            [(b, a), (c, b), (c, shortTask)]);
-        Assert.True(result.SetEquals([a, b, c]));
+            new[] { (a, 60), (b, 120), (c, 30), (shortTask, 10) },
+            new[] { (b, a), (c, b), (c, shortTask) });
+        Assert.True(result.SetEquals(new[] { a, b, c }));
     }
 
     [Fact]
     public void PortfolioDependencyRejectsIndirectCycle()
     {
         var a = Guid.NewGuid(); var b = Guid.NewGuid(); var c = Guid.NewGuid();
-        Assert.True(PlanningRules.WouldCreatePortfolioCycle(c, a, [(a, b), (b, c)]));
-        Assert.False(PlanningRules.WouldCreatePortfolioCycle(a, c, [(a, b)]));
+        Assert.True(PlanningRules.WouldCreatePortfolioCycle(c, a, new[] { (a, b), (b, c) }));
+        Assert.False(PlanningRules.WouldCreatePortfolioCycle(a, c, new[] { (a, b) }));
     }
 
     [Theory]

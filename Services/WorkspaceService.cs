@@ -279,6 +279,7 @@ public class WorkspaceService
         Guid? teamId,
         decimal hourlyRate)
     {
+        await RequireActiveAdminAsync();
         ValidatePersonInput(fullName, role, hourlyRate);
         if (string.IsNullOrWhiteSpace(email) || !email.Contains('@') || password.Length < 8)
             throw new InvalidOperationException("Informe e-mail válido e senha provisória com ao menos 8 caracteres.");
@@ -315,6 +316,7 @@ public class WorkspaceService
 
     public async Task DeactivateEmployeeAsync(Guid userId, Guid deactivatedBy)
     {
+        await RequireActiveAdminAsync();
         var service = _clientFactory.CreateServiceClient();
         var profiles = await service.From<Profile>().Get();
         var target = profiles.Models.FirstOrDefault(x => x.Id == userId)
@@ -343,6 +345,7 @@ public class WorkspaceService
 
     public async Task ReactivateEmployeeAsync(Guid userId)
     {
+        await RequireActiveAdminAsync();
         var service = _clientFactory.CreateServiceClient();
         await service.From<Profile>()
             .Where(profile => profile.Id == userId)
@@ -359,6 +362,16 @@ public class WorkspaceService
             ban_duration = "none"
         });
         response.EnsureSuccessStatusCode();
+    }
+
+    private async Task RequireActiveAdminAsync()
+    {
+        var client = await _clientFactory.CreateForCurrentUserAsync();
+        if (!Guid.TryParse(client.Auth.CurrentUser?.Id, out var actor))
+            throw new UnauthorizedAccessException("Autenticação necessária.");
+        var profile = await client.From<Profile>().Where(item => item.Id == actor).Single();
+        if (profile is not { IsActive: true, Role: "admin" })
+            throw new UnauthorizedAccessException("Esta operação exige um administrador ativo.");
     }
 
     private string RequiredSetting(string key)
@@ -378,8 +391,8 @@ public class WorkspaceService
     {
         var client = new HttpClient();
         client.DefaultRequestHeaders.Add("apikey", serviceKey);
-        client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", serviceKey);
+        if (!serviceKey.StartsWith("sb_secret_", StringComparison.Ordinal))
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", serviceKey);
         return client;
     }
 
